@@ -14,6 +14,7 @@ kotlin {
         }
     }
     js(IR) {
+        nodejs()
         browser {
             commonWebpackConfig {
                 cssSupport {
@@ -22,7 +23,7 @@ kotlin {
             }
         }
     }
-    // mingwX64() not supported by pbandk-runtime 0.14.2
+    mingwX64()
     linuxX64()
     linuxArm64()
 
