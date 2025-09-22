@@ -152,6 +152,7 @@ enum class MemberProtoCategory {
 
 class ReflectionCache(val version: String) {
     private val GENERATED_PROTO_PREFIX = "emu.grasscutter.net.proto."
+    private var encryption: Map<String, Map<String, List<EncryptionOperation>>>? = null
     private var mapping: ProtoMappingConfig? = null
     private var logger: KLogger? = KotlinLogging.logger {}
     private val lookup = MethodHandles.publicLookup()
@@ -164,6 +165,13 @@ class ReflectionCache(val version: String) {
         val file = File("config/$version/mapping.json")
         if (file.exists()) {
             this.mapping = Json.decodeFromString(file.readText())
+        }
+    }
+
+    fun loadEncryptionFromJson() {
+        val file = File("config/$version/encryption.json")
+        if (file.exists()) {
+            this.encryption = Json.decodeFromString(file.readText())
         }
     }
 
@@ -198,6 +206,7 @@ class ReflectionCache(val version: String) {
         val modelType: String?,
         val defaultValue: Any?,
         val isEnumCompat: Boolean,
+        val encrypt: List<EncryptionOperation>?
     )
 
     data class ModelInvalidMember(
@@ -422,6 +431,10 @@ class ReflectionCache(val version: String) {
             ?: mapping?.translation[name.toSnakeCase()]
             ?: name
 
+        // encryption
+        val encryptMap = encryption?.get(modelName) ?: emptyMap()
+        val encrypt = encryptMap[name] ?: encryptMap[name.toSnakeCase()]
+
         // enum compat mode
         var isEnumCompat = false
 
@@ -460,6 +473,7 @@ class ReflectionCache(val version: String) {
             category = getFieldProtoCategory(type),
             defaultValue = defaultMemberValue(type.jvmErasure),
             isEnumCompat = isEnumCompat,
+            encrypt = encrypt
         )
 
         // Add pair (model, proto) for nested processing
@@ -737,12 +751,46 @@ class ReflectionCache(val version: String) {
 
     // apply decryption (reverse of encryption, if any)
     private fun applyDecryption(value: Any?, member: ModelPropertyInfo): Any? {
-        return value
+        var ret = value
+        if (member.encrypt != null) {
+            for (step in member.encrypt.asReversed()) {
+                ret = when (ret) {
+                    is Int -> {
+                        val param: Int =
+                            if (step.param in Int.MIN_VALUE..Int.MAX_VALUE) step.param.toInt()
+                            else throw ArithmeticException("Overflow when converting Long to Int")
+
+                        step.op.decryptI32(ret, param)
+                    }
+                    is Long -> step.op.decryptI64(ret, step.param)
+                    // TODO: apply for float / double
+                    else -> ret
+                }
+            }
+        }
+        return ret
     }
 
     // apply encryption (if any)
     private fun applyEncryption(value: Any?, member: ModelPropertyInfo): Any? {
-        return value
+        var ret = value
+        if (member.encrypt != null) {
+            for (step in member.encrypt) {
+                ret = when (ret) {
+                    is Int -> {
+                        val param: Int =
+                            if (step.param in Int.MIN_VALUE..Int.MAX_VALUE) step.param.toInt()
+                            else throw ArithmeticException("Overflow when converting Long to Int")
+
+                        step.op.encryptI32(ret, param)
+                    }
+                    is Long -> step.op.encryptI64(ret, step.param)
+                    // TODO: apply for float / double
+                    else -> ret
+                }
+            }
+        }
+        return ret
     }
 
     private fun convertProtoToModel(
