@@ -6,6 +6,7 @@ import org.anime_game_servers.multi_proto.gi.data.general.entity.SceneReliquaryI
 import org.anime_game_servers.multi_proto.gi.data.general.entity.SceneWeaponInfo
 import org.anime_game_servers.core.base.Version
 import org.anime_game_servers.core.base.annotations.proto.ProtoModel
+import org.anime_game_servers.multi_proto.gi.data.general.avatar.AvatarExcelInfo
 
 @AddedIn(Version.GI_CB1)
 @ProtoModel
