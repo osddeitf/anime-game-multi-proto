@@ -49,8 +49,7 @@ open class DataGenerator(
             oneOfData.oneOfClassMap.forEach inner@{ (names, oneOfClass) ->
                 // TODO: handle names conflicts by version
                 val model = classInfoCache[oneOfClass]
-                val className =
-                    if (oneOfData.allowTypeBasedMapping) model?.name else names.firstOrNull()?.getClassName()
+                val className = names.firstOrNull()?.getClassName()
                 if (model == null || className == null) return@inner
                 file.id(8) += "class ${className}(value:${model.packageName}.${model.name}) : ${oneOfData.wrapperName}<${model.packageName}.${model.name}>(value)\n"
             }
@@ -60,23 +59,21 @@ open class DataGenerator(
 
     override fun addEncodeMethods(file: OutputStream, classInfo: ClassInfo) {
         file.id(4) += "override fun encodeToByteArray(version:$VERSION_ENUM_CLASS_NAME) : ByteArray? {\n"
-        file.id(8) += "return ProtoVersionManager.encodeToByteArray(\n"
+        file.id(8) += "return ProtoRuntimeProvider.instance.encodeToByteArray(\n"
         file.id(12) += "version.namespace,\n"
-        file.id(12) += "PROTO_CLASS_NAME,\n"
+        file.id(12) += "${classInfo.name}::class,\n"
         file.id(12) += "this,\n"
         file.id(8) += ")\n"
         file.id(4) += "}\n"
     }
 
     override fun addCompanionObject(file: OutputStream, classInfo: ClassInfo) {
-        val protoClass = "${classInfo.originalPackage.replaceFirst(".gi.data.", ".proto.")}.${classInfo.name}"
         file.id(4) += "companion object {\n"
-        file.id(8) += "private const val PROTO_CLASS_NAME = \"$protoClass\"\n"
         file.id(8) += "@JvmStatic\n"
         file.id(8) += "fun decodeFromByteArray(data: ByteArray, version:$VERSION_ENUM_CLASS_NAME): ${classInfo.name} {\n"
-        file.id(12) += "val obj: ${classInfo.name}? = ProtoVersionManager.decodeFromByteArray(\n"
+        file.id(12) += "val obj: ${classInfo.name}? = ProtoRuntimeProvider.instance.decodeFromByteArray(\n"
         file.id(16) += "version.namespace,\n"
-        file.id(16) += "PROTO_CLASS_NAME,\n"
+        file.id(16) += "${classInfo.name}::class,\n"
         file.id(16) += "data,\n"
         file.id(12) += ")\n"
         file.id(12) += "return obj ?: ${classInfo.name}()\n"
