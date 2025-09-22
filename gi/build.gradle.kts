@@ -13,7 +13,6 @@ ksp {
 kotlin {
     jvmToolchain(17)
     jvm {
-        withJava()
         testRuns["test"].executionTask.configure {
             useJUnitPlatform()
         }
@@ -72,7 +71,7 @@ tasks {
     getTasksByName("nativeSourcesJar", false).forEach {
         it.dependsOn("kspCommonMainKotlinMetadata")
     }
-    withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
+    withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>> {
         if (name != "kspCommonMainKotlinMetadata")
             dependsOn("kspCommonMainKotlinMetadata")
     }
@@ -82,7 +81,7 @@ publishing {
     publications {
         create<MavenPublication>("maven") {
             from(components["kotlin"])
-            artifactId = "gi-multi-proto"
+            artifactId = "gi-models"
         }
     }
 }
