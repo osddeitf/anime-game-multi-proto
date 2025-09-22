@@ -23,6 +23,7 @@ object ProtoLoader {
 
     var logger: KLogger? = null
     private val classLoaders = ConcurrentHashMap<String, VersionedClassLoader>()
+    private val packetMappers = ConcurrentHashMap<Version, PacketIdProvider>()
 
     fun getProtoSet(version: Version): ReflectionCache? {
         val handler = ServiceLoader.load(ProtoHandler::class.java).firstOrNull()
@@ -30,6 +31,40 @@ object ProtoLoader {
             return handler.acquireCache(version.namespace)
         }
         return null
+    }
+
+    fun getPacketMapper(version: Version): PacketIdProvider? {
+        val resourceName = "/packet_ids/${version.name}.csv"
+        val inputStream = object {}.javaClass.getResource(resourceName)?.openStream()
+            ?: return null
+
+        return packetMappers.computeIfAbsent(version, {
+            val forward = mutableMapOf<String, Int>()
+            val reverse = mutableMapOf<Int, String>()
+            logger?.info { "Loading $resourceName" }
+
+            BufferedReader(InputStreamReader(inputStream, StandardCharsets.UTF_8)).use { reader ->
+                reader.lineSequence()
+                    .filter { it.isNotBlank() && !it.startsWith("#") } // ignore empty lines and comments
+                    .forEach { line ->
+                        val (key, value) = line.split(",", limit = 2).map { it.trim() }
+                        value.toIntOrNull()?.let {
+                            forward[key] = it
+                            reverse[it] = key
+                        }?: logger?.warn { "Unknown line $line" }
+                    }
+            }
+
+            object : PacketIdProvider {
+                override fun getPacketId(packetName: String): Int {
+                    return forward[packetName] ?: 999999
+                }
+
+                override fun getPacketName(packetId: Int): String? {
+                    return reverse[packetId]
+                }
+            }
+        })
     }
 
     fun setCommonLogger(logger: Logger) {
