@@ -2,7 +2,6 @@ import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.KSType
 import org.anime_game_servers.multi_proto.core.interfaces.ProtoModel
-import org.anime_game_servers.multi_proto.core.interfaces.ProtoModelDecoder
 import java.io.OutputStream
 
 open class DataGenerator(
@@ -58,7 +57,6 @@ open class DataGenerator(
     override fun addImports(file: OutputStream, classInfo: ClassInfo) {
         super.addImports(file, classInfo)
         file += "import ${ProtoModel::class.java.canonicalName}\n" +
-                "import ${ProtoModelDecoder::class.java.canonicalName}\n" +
                 "import pbandk.decodeFromByteArray\n" +
                 "import pbandk.encodeToByteArray\n" +
                 "import $PROTO_ONE_OF_ANNOTATION\n"

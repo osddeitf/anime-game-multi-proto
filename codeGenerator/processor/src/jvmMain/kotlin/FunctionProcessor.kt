@@ -4,9 +4,6 @@ import com.google.devtools.ksp.*
 import com.google.devtools.ksp.processing.*
 import com.google.devtools.ksp.symbol.*
 import org.anime_game_servers.core.base.Version
-import org.anime_game_servers.multi_proto.core.annotations.ModuleMetaData
-import java.io.File
-import java.io.OutputStream
 
 const val BASE_ANNOTATION_PATH = "org.anime_game_servers.core.base.annotations"
 const val BASE_PROTO_ANNOTATION_PATH = "$BASE_ANNOTATION_PATH.proto"

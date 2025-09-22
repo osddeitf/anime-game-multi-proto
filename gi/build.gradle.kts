@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "org.anime_game_servers.multi_proto"
-version = "0.3.0"
+version = "0.3.0-SNAPSHOT"
 
 ksp {
     arg("basePacket", "org.anime_game_servers.multi_proto.gi")
@@ -30,9 +30,6 @@ kotlin {
             dependencies {
                 api(project(":base"))
                 implementation("org.anime_game_servers.core:gi:0.2")
-                implementation("io.github.oshai:kotlin-logging:7.0.6")
-                // for proto modules loaded dynamically
-                implementation("pro.streem.pbandk:pbandk-runtime:0.16.0")
             }
             kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin/")
             kotlin.exclude("org/anime_game_servers/multi_proto/gi/data/**/*")
@@ -43,11 +40,7 @@ kotlin {
                 implementation(kotlin("test"))
             }
         }
-        val jvmMain by getting {
-            dependencies{
-                implementation("io.github.oshai:kotlin-logging-jvm:7.0.6")
-            }
-        }
+        val jvmMain by getting
         val jvmTest by getting
         val jsMain by getting
         val jsTest by getting

@@ -21,6 +21,8 @@ include(":processor-proto")
 include(":base")
 include(":gi")
 include(":proto")
+include(":protoset")
+include(":runtime")
 
 project(":processor").projectDir = File("codeGenerator/processor")
 project(":processor-proto").projectDir = File("codeGenerator/processor-proto")
