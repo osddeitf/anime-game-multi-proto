@@ -3,6 +3,7 @@ pluginManagement {
     plugins {
         id("com.google.devtools.ksp") version "2.2.20-2.0.3"
         kotlin("multiplatform") version "2.2.20" apply false
+        kotlin("plugin.serialization") version "2.2.20"
     }
     repositories {
         gradlePluginPortal()

@@ -13,6 +13,6 @@ dependencies {
 kotlin {}
 
 sourceSets.main {
-    java.srcDir("generated/proto")
+    java.srcDir("generated/java")
     resources.srcDir("generated/resources")
 }

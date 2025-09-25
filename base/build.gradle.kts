@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "org.anime_game_servers.multi_proto"
-version = "0.2"
+version = "0.2.0-SNAPSHOT"
 
 kotlin {
     jvmToolchain(17)

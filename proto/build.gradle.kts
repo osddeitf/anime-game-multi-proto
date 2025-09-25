@@ -76,7 +76,7 @@ tasks {
     getTasksByName("nativeSourcesJar", false).forEach {
         it.dependsOn("kspCommonMainKotlinMetadata")
     }
-    withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
+    withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>> {
         if (name != "kspCommonMainKotlinMetadata")
             dependsOn("kspCommonMainKotlinMetadata")
     }
