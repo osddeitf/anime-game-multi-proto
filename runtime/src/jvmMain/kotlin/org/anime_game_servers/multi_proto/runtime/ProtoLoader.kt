@@ -34,8 +34,8 @@ object ProtoLoader {
     }
 
     fun getPacketMapper(version: Version): PacketIdProvider? {
-        val resourceName = "/packet_ids/${version.name}.csv"
-        val inputStream = object {}.javaClass.getResource(resourceName)?.openStream()
+        val resourceName = "packets.csv"
+        val inputStream = getClassLoader(version.namespace).findResource(resourceName)?.openStream()
             ?: return null
 
         return packetMappers.computeIfAbsent(version, {
@@ -71,13 +71,16 @@ object ProtoLoader {
         this.logger = KotlinLogging.logger(logger)
     }
 
+    private fun getClassLoader(version: String) =
+        classLoaders.computeIfAbsent(version) {
+            VersionedClassLoader(version)
+        }
+
     internal fun loadClass(
         version: String,
         className: String
     ): Class<*>? {
-        val classLoader = classLoaders.computeIfAbsent(version) {
-            VersionedClassLoader(version)
-        }
+        val classLoader = getClassLoader(version);
         return try {
             classLoader.loadClass(className)
 //            classLoader.getClass(className)

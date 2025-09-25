@@ -14,4 +14,5 @@ kotlin {}
 
 sourceSets.main {
     java.srcDir("generated/proto")
+    resources.srcDir("generated/resources")
 }
