@@ -5,6 +5,7 @@ import org.anime_game_servers.core.base.annotations.RemovedIn
 import org.anime_game_servers.multi_proto.gi.data.general.PropValue
 import org.anime_game_servers.core.base.Version
 import org.anime_game_servers.core.base.annotations.proto.ProtoModel
+import org.anime_game_servers.multi_proto.gi.data.miliastra.BeyondCosmeticPlan
 
 @AddedIn(Version.GI_CB1)
 @ProtoModel
@@ -55,4 +56,8 @@ internal interface AvatarInfo {
     var animHash: Int
     @AddedIn(Version.GI_5_7_0)
     var weaponSkinId: Int
+    @AddedIn(Version.GI_6_1_0)
+    var curCosmeticPlan: BeyondCosmeticPlan
+    @AddedIn(Version.GI_6_1_0)
+    var curVoiceId: Int
 }
