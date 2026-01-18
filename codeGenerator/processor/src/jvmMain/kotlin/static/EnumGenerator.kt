@@ -1,15 +1,13 @@
+package static
+
 import com.google.devtools.ksp.KspExperimental
 import com.google.devtools.ksp.getAnnotationsByType
-import com.google.devtools.ksp.getDeclaredProperties
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import org.anime_game_servers.core.base.annotations.proto.AltName
 import java.io.OutputStream
-import kotlin.collections.addAll
-import kotlin.sequences.forEach
 
 const val UNRECOGNISED_ENUM_NAME = "UNRECOGNISED"
 

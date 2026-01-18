@@ -1,9 +1,15 @@
+package static
+
 import com.google.devtools.ksp.processing.KSPLogger
-import com.google.devtools.ksp.symbol.*
+import com.google.devtools.ksp.symbol.KSDeclaration
+import com.google.devtools.ksp.symbol.KSFile
+import com.google.devtools.ksp.symbol.KSType
+import org.anime_game_servers.core.base.Version
 import org.anime_game_servers.multi_proto.core.interfaces.PacketIdProvider
 import java.io.OutputStream
 import java.util.*
-import kotlin.collections.List
+
+val VERSION_ENUM_CLASS_NAME : String = Version::class.java.simpleName
 
 class PacketIdGenerator(
     val logger: KSPLogger,
