@@ -55,6 +55,10 @@ kotlin {
             getTasksByName("jvmJar", true).forEach{
                 it.setProperty("zip64", true)
             }
+            dependencies {
+                compileOnly("org.slf4j:slf4j-api:1.7.36")
+                implementation("io.github.oshai:kotlin-logging:7.0.6")
+            }
         }
         val jvmTest by getting
         val jsMain by getting
@@ -83,6 +87,14 @@ tasks {
         if (name != "kspCommonMainKotlinMetadata")
             dependsOn("kspCommonMainKotlinMetadata")
     }
+}
+
+val isDynamicRuntime = providers
+    .gradleProperty("org.anime_game_servers.dynamicRuntime")
+    .orElse("false")
+
+ksp {
+    arg("isDynamicRuntime", isDynamicRuntime.get())
 }
 
 publishing {
