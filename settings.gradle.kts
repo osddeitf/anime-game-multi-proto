@@ -19,5 +19,6 @@ rootProject.name = "multi-proto"
 include(":processor")
 include(":base")
 include(":gi")
+include(":runtime")
 
 project(":processor").projectDir = File("codeGenerator/processor")

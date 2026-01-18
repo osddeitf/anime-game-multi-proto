@@ -2,6 +2,7 @@ plugins {
     `version-catalog`
     id("maven-publish")
     alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.kotlinx.serialization) apply false
     alias(libs.plugins.ksp) apply false
 }
 group = "org.anime_game_servers.multi_proto"
