@@ -14,6 +14,7 @@ import org.anime_game_servers.multi_proto.gi.ProtoVersionRuntime
 import org.anime_game_servers.multi_proto.runtime.encryption.EncryptionOperation
 import org.anime_game_servers.multi_proto.runtime.common.ProtoMappingConfig
 import org.anime_game_servers.multi_proto.runtime.common.applyDecryption
+import org.anime_game_servers.multi_proto.runtime.common.applyEncryption
 import org.anime_game_servers.multi_proto.runtime.common.defaultMemberValue
 import org.anime_game_servers.multi_proto.runtime.common.fixTypo
 import org.anime_game_servers.multi_proto.runtime.common.prettyString
@@ -676,7 +677,12 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
         }
 
         val modelInfo = resolveModelInfo(clazz) ?: return byteArrayOf()
-        return convertModelToProto(modelInfo, model, clazz.simpleName).asByteArray()
+        val buf = ByteBufAllocator.DEFAULT.ioBuffer()
+        convertModelToProto(modelInfo, model, buf, clazz.simpleName)
+
+        val bytes = buf.asByteArray()
+        buf.release()
+        return bytes
     }
 
     private fun ModelPropertyInfo.decodeEnum(value: Int?): Enum<*> {
@@ -890,13 +896,20 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
         return modelInfo.modelConstruct.invokeWithArguments(args)
     }
 
+    private fun ModelPropertyInfo.encodeEnum(value: Enum<*>): Long {
+        val name = modelTypeName!!
+        val enum = enumCache[name]?.getOrNull() ?: error("encode: Enum $name expected")
+        val numeric = enum.forward[value] ?: 0
+        return numeric.toLong()
+    }
+
     private fun convertModelToProto(
         modelInfo: ModelInfo,
         model: Any,
+        bytes: ByteBuf,
         name: String?
-    ): ByteBuf {
-        val bytes: ByteBuf = ByteBufAllocator.DEFAULT.ioBuffer()
-        fun writeEncoded(bytes: ByteBuf, member: ModelPropertyInfo, data: Any) {
+    ) {
+        fun writeEncoded(bytes: ByteBuf, member: ModelPropertyInfo, data: Any, isPacked: Boolean = false) {
             val encryption = member.encryption
             val protoType = if (member.isEnumCompat && data is Enum<*>) {
                 FieldDescriptorProto.Type.TYPE_ENUM
@@ -905,42 +918,95 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
                 member.fieldDescriptor.type
             }
 
+            // NOTE: these functions seem repetitive, but are optimized as bytecodes
+            fun writeTag() {
+                if (!isPacked) bytes.writeFieldTag(member.fieldNumber, member.singularFieldWire)
+            }
+            fun writeBoolean(data: Boolean) {
+                val value = encryption.applyEncryption(data)
+                if (!isPacked && !value) return
+                writeTag()
+                bytes.writeBoolean(value)
+            }
+            fun writeVarInt(data: Int) {
+                val value = encryption.applyEncryption(data)
+                if (!isPacked && value == 0) return
+                writeTag()
+                bytes.writeVarInt(value)
+            }
+            fun writeVarInt(data: Long) {
+                val value = encryption.applyEncryption(data)
+                if (!isPacked && value == 0L) return
+                writeTag()
+                bytes.writeVarInt(value)
+            }
+            fun writeFixedInt(data: Int) {
+                val value = encryption.applyEncryption(data)
+                if (!isPacked && value == 0) return
+                writeTag()
+                bytes.writeIntLE(value)
+            }
+            fun writeFixedInt(data: Long) {
+                val value = encryption.applyEncryption(data)
+                if (!isPacked && value == 0L) return
+                writeTag()
+                bytes.writeLongLE(value)
+            }
+            fun writeFloat(data: Float) {
+                val value = Float.fromBits(encryption.applyEncryption(data.toRawBits()))
+                if (!isPacked && value == 0f) return
+                writeTag()
+                bytes.writeFloatLE(value)
+            }
+            fun writeDouble(data: Double) {
+                val value = Double.fromBits(encryption.applyEncryption(data.toRawBits()))
+                if (!isPacked && value == 0.0) return
+                writeTag()
+                bytes.writeDoubleLE(value)
+            }
+
             when (protoType) {
-                FieldDescriptorProto.Type.TYPE_INT32,
-                FieldDescriptorProto.Type.TYPE_UINT32 -> bytes.writeVarInt(encryption, data as Int)
+                FieldDescriptorProto.Type.TYPE_BOOL -> writeBoolean(data as Boolean)
+                FieldDescriptorProto.Type.TYPE_INT32 -> writeVarInt((data as Int).toLong())
+                FieldDescriptorProto.Type.TYPE_UINT32 -> writeVarInt(data as Int)
                 FieldDescriptorProto.Type.TYPE_INT64,
-                FieldDescriptorProto.Type.TYPE_UINT64 -> bytes.writeVarInt(encryption, data as Long)
-                FieldDescriptorProto.Type.TYPE_FIXED32 -> bytes.writeIntLE(encryption, data as Int)
-                FieldDescriptorProto.Type.TYPE_FIXED64 -> bytes.writeLongLE(encryption, data as Long)
-                FieldDescriptorProto.Type.TYPE_BOOL -> bytes.writeBoolean(encryption, data as Boolean)
-                FieldDescriptorProto.Type.TYPE_DOUBLE -> bytes.writeDoubleLE(encryption, data as Double)
-                FieldDescriptorProto.Type.TYPE_FLOAT -> bytes.writeFloatLE(encryption, data as Float)
-                FieldDescriptorProto.Type.TYPE_SINT32 -> bytes.writeVarInt(encryption, (data as Int).encodeZigZag())
-                FieldDescriptorProto.Type.TYPE_SINT64 -> bytes.writeVarInt(encryption, (data as Long).encodeZigZag())
-                FieldDescriptorProto.Type.TYPE_SFIXED32 -> bytes.writeIntLE(encryption, (data as Int).encodeZigZag())
-                FieldDescriptorProto.Type.TYPE_SFIXED64 -> bytes.writeLongLE(encryption, (data as Long).encodeZigZag())
-                FieldDescriptorProto.Type.TYPE_ENUM -> {
-                    val name = member.modelTypeName!!
-                    val enum = enumCache[name]?.getOrNull() ?: error("encode: Enum $name expected")
-                    val value = enum.forward[data as Enum<*>]
-                    bytes.writeVarInt(encryption, value ?: 0)
-                }
+                FieldDescriptorProto.Type.TYPE_UINT64 -> writeVarInt(data as Long)
+                FieldDescriptorProto.Type.TYPE_SINT32 -> writeVarInt((data as Int).encodeZigZag())
+                FieldDescriptorProto.Type.TYPE_SINT64 -> writeVarInt((data as Long).encodeZigZag())
+                FieldDescriptorProto.Type.TYPE_FLOAT -> writeFloat(data as Float)
+                FieldDescriptorProto.Type.TYPE_DOUBLE -> writeDouble(data as Double)
+                FieldDescriptorProto.Type.TYPE_FIXED32 -> writeFixedInt(data as Int)
+                FieldDescriptorProto.Type.TYPE_FIXED64 -> writeFixedInt(data as Long)
+                FieldDescriptorProto.Type.TYPE_SFIXED32 -> writeFixedInt((data as Int).encodeZigZag())
+                FieldDescriptorProto.Type.TYPE_SFIXED64 -> writeFixedInt((data as Long).encodeZigZag())
+                FieldDescriptorProto.Type.TYPE_ENUM -> writeVarInt(member.encodeEnum(data as Enum<*>))
                 FieldDescriptorProto.Type.TYPE_MESSAGE -> {
                     val name = member.modelTypeName
                     val model = modelCache[name]?.getOrNull() ?: error("encode: Model $name expected")
-                    val encoded = convertModelToProto(model, data, name)
-                    bytes.writeVarInt(null, encoded.readableBytes())  // read index is always 0, and must be so
-                    bytes.writeBytes(encoded)
+                    val embedded = ByteBufAllocator.DEFAULT.ioBuffer()
+                    try {
+                        convertModelToProto(model, data, embedded, name)
+                        writeTag()
+                        bytes.writeVarInt(embedded.readableBytes())  // read index is always 0, and must be so
+                        bytes.writeBytes(embedded)
+                    }
+                    finally {
+                        embedded.release()
+                    }
                 }
                 FieldDescriptorProto.Type.TYPE_STRING -> {
                     data as? String ?: error("encode: String expected")
+                    if (data.isEmpty()) return
                     val len = ByteBufUtil.utf8Bytes(data)
-                    bytes.writeVarInt(null, len)
+                    writeTag()
+                    bytes.writeVarInt(len)
                     bytes.writeCharSequence(data, Charsets.UTF_8)
                 }
                 FieldDescriptorProto.Type.TYPE_BYTES -> {
                     data as? ByteArray ?: error("encode: ByteArray expected")
-                    bytes.writeVarInt(null, data.size)
+                    if (data.isEmpty()) return
+                    writeTag()
+                    bytes.writeVarInt(data.size)
                     bytes.writeBytes(data)
                 }
                 FieldDescriptorProto.Type.TYPE_GROUP -> TODO("Unsupported")
@@ -955,24 +1021,29 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
                     member.defaultValue if member.encryption == null -> return
                     is List<*> if data.isEmpty() -> return
                     is Map<*, *> if data.isEmpty() -> return
+                    is Enum<*> if data.name == "UNRECOGNISED" -> return
                 }
 
                 if (data is List<*>) {
                     val isPacked = member.singularFieldWire != 2
                     if (isPacked) {
                         bytes.writeFieldTag(member.fieldNumber, 2)
-                        val encoded = ByteBufAllocator.DEFAULT.ioBuffer()
-                        data.forEach {
-                            it ?: return@forEach
-                            writeEncoded(encoded, member, it)
+                        val packed = ByteBufAllocator.DEFAULT.ioBuffer()
+                        try {
+                            data.forEach {
+                                it ?: return@forEach
+                                writeEncoded(packed, member, it, true)
+                            }
+                            bytes.writeVarInt(packed.readableBytes())
+                            bytes.writeBytes(packed)
                         }
-                        bytes.writeVarInt(null, encoded.readableBytes())
-                        bytes.writeBytes(encoded)
+                        finally {
+                            packed.release()
+                        }
                     }
                     else {
                         data.forEach {
                             it ?: return@forEach
-                            bytes.writeFieldTag(member.fieldNumber, member.singularFieldWire)
                             writeEncoded(bytes, member, it)
                             checkpoint = bytes.writerIndex()    // save new checkpoint
                         }
@@ -988,16 +1059,20 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
 
                     for ((k, v) in data) {
                         bytes.writeFieldTag(member.fieldNumber, 2)
-                        val encoded = ByteBufAllocator.DEFAULT.ioBuffer()
-                        writeMemberWithFailsafe(encoded, key, k)
-                        writeMemberWithFailsafe(encoded, value, v)
-                        bytes.writeVarInt(null, encoded.readableBytes())
-                        bytes.writeBytes(encoded)
-                        checkpoint = bytes.writerIndex()    // save new checkpoint
+                        val mapEntry = ByteBufAllocator.DEFAULT.ioBuffer()
+                        try {
+                            writeMemberWithFailsafe(mapEntry, key, k)
+                            writeMemberWithFailsafe(mapEntry, value, v)
+                            bytes.writeVarInt(mapEntry.readableBytes())
+                            bytes.writeBytes(mapEntry)
+                            checkpoint = bytes.writerIndex()    // save new checkpoint
+                        }
+                        finally {
+                            mapEntry.release()
+                        }
                     }
                 }
                 else {
-                    bytes.writeFieldTag(member.fieldNumber, member.singularFieldWire)
                     writeEncoded(bytes, member, data)
                 }
             }
@@ -1031,7 +1106,5 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
             val value = getter.invoke(model)
             writeMemberWithFailsafe(bytes, member, value)
         }
-
-        return bytes
     }
 }

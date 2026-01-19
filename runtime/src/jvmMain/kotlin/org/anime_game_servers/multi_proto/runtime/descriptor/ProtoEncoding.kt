@@ -1,8 +1,6 @@
 package org.anime_game_servers.multi_proto.runtime.descriptor
 
 import io.netty.buffer.ByteBuf
-import org.anime_game_servers.multi_proto.runtime.common.applyEncryption
-import org.anime_game_servers.multi_proto.runtime.encryption.EncryptionOperation
 
 fun ByteBuf.readVarInt(): Long {
     var value = 0L
@@ -41,8 +39,6 @@ fun ByteBuf.readLenDelimited(): ByteBuf {
 
 
 // fixed types converters
-fun ByteBuf.asFloat() = this.readFloatLE()
-fun ByteBuf.asDouble() = this.readDoubleLE()
 fun ByteBuf.asInt32() = this.readIntLE()
 fun ByteBuf.asInt64() = this.readLongLE()
 
@@ -82,12 +78,12 @@ fun ByteBuf.asPackedFixed64(): List<ByteBuf> {
 }
 
 // len-delim converters. TODO: according to chatgpt, invalid characters are substituted
-fun ByteBuf.asString(): String = this.toString(Charsets.UTF_8)
+fun ByteBuf.asString(): String = this.readString(readableBytes(), Charsets.UTF_8)
 
 fun ByteBuf.asByteArray(): ByteArray {
     val len = readableBytes()
     val bytes = ByteArray(len)
-    readBytes(bytes)
+    this.readBytes(bytes)
     return bytes
 }
 
@@ -99,8 +95,8 @@ fun Long.encodeZigZag() = (this shl 1) xor (this shr 63)
 fun Long.isSafeInt() = toUInt() in UInt.MIN_VALUE..UInt.MAX_VALUE
 
 // writers
-fun ByteBuf.writeVarInt(encryption: List<EncryptionOperation>?, value: Long) {
-    var v = encryption.applyEncryption(value) as Long
+fun ByteBuf.writeVarInt(value: Long) {
+    var v = value
     while (true) {
         if ((v and 0x7FL.inv()) == 0L) {
             writeByte(v.toInt())
@@ -111,9 +107,9 @@ fun ByteBuf.writeVarInt(encryption: List<EncryptionOperation>?, value: Long) {
     }
 }
 
-fun ByteBuf.writeVarInt(encryption: List<EncryptionOperation>?, value: Int) {
-    // NOTE: though look the same as Long variant, it actually not
-    var v = encryption.applyEncryption(value) as Int
+// NOTE: though look the same as Long variant, it actually not
+fun ByteBuf.writeVarInt(value: Int) {
+    var v = value
     while (true) {
         if ((v and 0x7F.inv()) == 0) {
             writeByte(v)
@@ -124,27 +120,7 @@ fun ByteBuf.writeVarInt(encryption: List<EncryptionOperation>?, value: Int) {
     }
 }
 
-fun ByteBuf.writeBoolean(encryption: List<EncryptionOperation>?, value: Boolean) {
-    val data = encryption.applyEncryption(value) as Boolean
-    writeBoolean(data)
-}
-fun ByteBuf.writeIntLE(encryption: List<EncryptionOperation>?, value: Int) {
-    val data = encryption.applyEncryption(value) as Int
-    writeIntLE(data)
-}
-fun ByteBuf.writeLongLE(encryption: List<EncryptionOperation>?, value: Long) {
-    val data = encryption.applyEncryption(value) as Long
-    writeLongLE(data)
-}
-fun ByteBuf.writeFloatLE(encryption: List<EncryptionOperation>?, value: Float) {
-    val data = encryption.applyEncryption(value) as Float
-    writeFloatLE(data)
-}
-fun ByteBuf.writeDoubleLE(encryption: List<EncryptionOperation>?, value: Double) {
-    val data = encryption.applyEncryption(value) as Double
-    writeDoubleLE(data)
-}
 fun ByteBuf.writeFieldTag(number: Int, wire: Int) {
     val tag = (number shl 3) or wire
-    writeVarInt(null, tag)
+    writeVarInt(tag)
 }
