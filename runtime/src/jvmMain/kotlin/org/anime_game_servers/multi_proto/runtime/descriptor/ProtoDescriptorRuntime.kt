@@ -445,8 +445,8 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
     }
 
     private fun prepareEnumClass(enumClass: KClass<*>, enumProto: EnumDescriptorProto): EnumInfo {
-        val modelName = enumClass.simpleName ?: error("Model class must have a name")
-        logger?.info { "Matching enum: ${enumProto.name}" }
+        val modelName = enumClass.simpleName!!
+        logger?.info { "Matching enum: $modelName -> ${enumProto.name}" }
 
         @Suppress("UNCHECKED_CAST")
         val modelEnums = enumClass.java.enumConstants as Array<Enum<*>>
@@ -469,7 +469,7 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
             val otherName = alias[enum.name] ?: enum.name
             when (val other = protoEnums[otherName]) {
                 null -> {
-                    logger?.warn { "Missing matching enum for model: ${enum.name}" }
+                    logger?.warn { "Missing matching enum for model $modelName: ${enum.name}" }
                     forward[enum] = 0   // TODO: or -1???
                 }
 
@@ -481,7 +481,7 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
         }
         for ((_, enum) in protoEnums) {
             if (backward.contains(enum.number)) continue
-            logger?.warn { "Missing matching enum for proto: ${enum.name}" }
+            logger?.warn { "Unmatched enum in proto ${enumProto.name}: ${enum.name}" }
         }
 
         return EnumInfo(unknown, forward, backward)
