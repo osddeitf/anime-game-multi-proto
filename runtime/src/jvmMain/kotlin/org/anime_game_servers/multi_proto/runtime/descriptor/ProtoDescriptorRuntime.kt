@@ -72,11 +72,14 @@ private fun getMemberEquivalentProtoType(kType: KType, protoField: FieldDescript
     return when {
         kClassifier == Boolean::class -> FieldDescriptorProto.Type.TYPE_BOOL
         kClassifier == Int::class ->
-            if (protoField.isZigzag()) {
+            if (protoField.type == FieldDescriptorProto.Type.TYPE_INT32) {
+                FieldDescriptorProto.Type.TYPE_INT32
+            }
+            else if (protoField.isZigzag()) {
                 FieldDescriptorProto.Type.TYPE_SINT32
             }
             else {
-                FieldDescriptorProto.Type.TYPE_INT32
+                FieldDescriptorProto.Type.TYPE_UINT32
             }
         kClassifier == Long::class ->
             if (protoField.isZigzag()) {
@@ -685,16 +688,9 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
         return bytes
     }
 
-    private fun ModelPropertyInfo.decodeEnum(value: Int?): Enum<*> {
-        val enum = enumCache[this.modelTypeName]?.getOrNull() ?: error("Missing enum for field")
-        return enum.backward[value] ?: enum.unknown
-    }
-
-    private fun ModelPropertyInfo.decodeEnum(varInt: Long): Enum<*> {
-        return varInt
-            // enum must be in range of int32
-            .takeIf { it in Int.MIN_VALUE..Int.MAX_VALUE }
-            .let { this.decodeEnum(varInt.toInt()) }
+    private fun ModelPropertyInfo.decodeEnum(value: Long): Enum<*> {
+        val enum = enumCache[this.modelTypeName]?.getOrNull() ?: error("decode: Missing enum for field")
+        return enum.backward[value.toInt()] ?: enum.unknown
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -702,11 +698,7 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
         encryption.applyDecryption(value!!) as T
 
     private fun ModelPropertyInfo.decrypt32(value: Long) =
-        if (encryption != null)
-            decrypt(value.toInt())
-        else
-            // if out of zone, fallback to default value (0)
-            if (value.isSafeInt()) value.toInt() else 0
+        encryption.applyEncryption(value.toInt())
 
     private fun ModelPropertyInfo.decodeZigzag(int: Int) =
         if (fieldDescriptor.isZigzag()) int.asZigZag() else int
@@ -714,35 +706,41 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
     private fun ModelPropertyInfo.decodeZigzag(int: Long) =
         if (fieldDescriptor.isZigzag()) int.asZigZag() else int
 
+    // truncate -> decrypt -> zigzag
     private fun ModelPropertyInfo.decodeVarInt(varInt: Long): Any {
         return when (modelType) {
-            FieldDescriptorProto.Type.TYPE_BOOL -> decrypt32(decodeZigzag(varInt)) == 1
-            FieldDescriptorProto.Type.TYPE_INT32 -> decrypt32(varInt)
-            FieldDescriptorProto.Type.TYPE_SINT32 -> decrypt32(varInt.asZigZag())
-            FieldDescriptorProto.Type.TYPE_INT64 -> decrypt(varInt)
-            FieldDescriptorProto.Type.TYPE_SINT64 -> decrypt(varInt.asZigZag())
+            FieldDescriptorProto.Type.TYPE_BOOL -> decodeZigzag(decrypt(varInt)) == 1L
+            FieldDescriptorProto.Type.TYPE_UINT32 -> decrypt32(varInt)
+            FieldDescriptorProto.Type.TYPE_SINT32 -> decrypt32(varInt).asZigZag()
+            FieldDescriptorProto.Type.TYPE_INT32 -> decrypt(varInt).toInt()
+            FieldDescriptorProto.Type.TYPE_INT64,
+            FieldDescriptorProto.Type.TYPE_UINT64 -> decrypt(varInt)
+            FieldDescriptorProto.Type.TYPE_SINT64 -> decrypt(varInt).asZigZag()
             FieldDescriptorProto.Type.TYPE_ENUM -> decodeEnum(decrypt(varInt))
             else -> error("Unreachable: model type is invalid $modelType")
         }
     }
     private fun ModelPropertyInfo.decodeFixed32(fixed: ByteBuf): Any {
+        val bits = fixed.asInt32()
         return when (modelType) {
-            FieldDescriptorProto.Type.TYPE_BOOL -> decrypt(decodeZigzag(fixed.asInt32())) == 1
-            FieldDescriptorProto.Type.TYPE_INT32 -> decrypt(fixed.asInt32())
-            FieldDescriptorProto.Type.TYPE_SINT32 -> decrypt(fixed.asInt32().asZigZag())
-            FieldDescriptorProto.Type.TYPE_FLOAT -> decrypt(fixed.asFloat())
+            FieldDescriptorProto.Type.TYPE_BOOL -> decodeZigzag(decrypt(bits)) == 1
+            FieldDescriptorProto.Type.TYPE_UINT32 -> decrypt(bits)
+            FieldDescriptorProto.Type.TYPE_SINT32 -> decrypt(bits).asZigZag()
+            FieldDescriptorProto.Type.TYPE_FLOAT -> decrypt(Float.fromBits(bits))
             else -> error("Unreachable: model type is invalid $modelType")
         }
     }
     private fun ModelPropertyInfo.decodeFixed64(fixed: ByteBuf): Any {
+        val bits = fixed.asInt64()
         return when (modelType) {
-            FieldDescriptorProto.Type.TYPE_BOOL -> decrypt32(decodeZigzag(fixed.asInt64())) == 1
-            FieldDescriptorProto.Type.TYPE_INT32 -> decrypt32(fixed.asInt64())
-            FieldDescriptorProto.Type.TYPE_SINT32 -> decrypt32(fixed.asInt64().asZigZag())
-            FieldDescriptorProto.Type.TYPE_INT64 -> decrypt(fixed.asInt64())
-            FieldDescriptorProto.Type.TYPE_SINT64 -> decrypt(fixed.asInt64().asZigZag())
-            FieldDescriptorProto.Type.TYPE_FLOAT -> decrypt(fixed.asDouble()).toFloat()  // compat, could be wrong
-            FieldDescriptorProto.Type.TYPE_DOUBLE -> decrypt(fixed.asDouble())
+            FieldDescriptorProto.Type.TYPE_BOOL -> decodeZigzag(decrypt(bits)) == 1L
+            FieldDescriptorProto.Type.TYPE_UINT32 -> decrypt(bits).toInt()
+            FieldDescriptorProto.Type.TYPE_SINT32 -> decrypt(bits).toInt().asZigZag()
+            FieldDescriptorProto.Type.TYPE_INT64,
+            FieldDescriptorProto.Type.TYPE_UINT64 -> decrypt(bits)
+            FieldDescriptorProto.Type.TYPE_SINT64 -> decrypt(bits).asZigZag()
+            FieldDescriptorProto.Type.TYPE_FLOAT -> Float.fromBits(decrypt(bits).toInt())
+            FieldDescriptorProto.Type.TYPE_DOUBLE -> Double.fromBits(decrypt(bits))
             else -> error("Unreachable: model type is invalid $modelType")
         }
     }
@@ -869,7 +867,7 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
                 }
             } else if (field.isEnumCompat) {
                 properties[field] = when (value) {
-                    is Int -> field.decodeEnum(value)
+                    is Int -> field.decodeEnum(value.toLong())
                     is Long -> field.decodeEnum(value)
                     else -> value   // keep as-is, model constructor will throw
                 }
