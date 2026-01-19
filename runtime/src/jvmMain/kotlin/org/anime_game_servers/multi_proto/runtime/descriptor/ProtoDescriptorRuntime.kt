@@ -503,12 +503,19 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
         val oneofs = mutableMapOf<Int, ModelOneOfInfo>()
         val protoFields = messageProto.getFields()
 
-        val cacheComponent: (Int) -> Unit = { index ->
+        fun cacheComponent(index: Int) {
             val modelGetter = modelClass.memberFunctions
                 .firstOrNull { it.name == "component${index + 1}" }
                 ?.javaMethod
                 ?: error("Unexpected: data class doesn't have componentN function")
             components[index] = lookup.unreflect(modelGetter)
+        }
+
+        fun getEncryption(memberName: String): List<EncryptionOperation>? {
+            val altNames = getAlternativeNames(memberName)
+            return altNames.firstNotNullOfOrNull {
+                encryptionMap?.get(name)?.get(it)
+            }
         }
 
         fun handleInvalidMember(ex: Exception, memberName: String, index: Int, type: KType) {
@@ -520,7 +527,7 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
             invalidMembers[memberName] = ModelInvalidMember(
                 index,
                 defaultMemberValue(type.jvmErasure),
-                null,
+                getEncryption(memberName),
             )
         }
 
@@ -533,7 +540,10 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
                     type,
                     index,
                     protoFields,
-                ).copy(dataWrapperConstructor = wrapper)
+                ).copy(
+                    encryption = getEncryption(memberName),
+                    dataWrapperConstructor = wrapper
+                )
 
                 // cache the componentN function
                 cacheComponent(index)
@@ -577,17 +587,6 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
             }
             else {
                 resolveMember(propName, prop.index, prop.type)
-            }
-        }
-
-        // add encryption info, if any
-        encryptionMap?.get(name)?.forEach { (key, encrypt) ->
-            val name = key.toPascalCase().replaceFirstChar { it.lowercase() }
-            members[name]?.let {
-                members[name] = it.copy(encryption = encrypt)
-            }
-            invalidMembers[name]?.let {
-                invalidMembers[name] = it.copy(encryption = encrypt)
             }
         }
 
