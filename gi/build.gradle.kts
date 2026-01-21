@@ -5,10 +5,19 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val isDynamicRuntime = providers
+    .gradleProperty("org.anime_game_servers.dynamicRuntime")
+    .orElse("false")
+
 // until the rework for proto handling is done, we use this to compile packages for specific game versions
-val protoVersion = 32
 group = "org.anime_game_servers.multi_proto"
-version = libs.versions.anime.game.multi.proto.get()+".$protoVersion"
+version = if (isDynamicRuntime.get() != "true") {
+    val protoVersion = 32
+    libs.versions.anime.game.multi.proto.get()+".$protoVersion"
+}
+else {
+    "0.3.0-SNAPSHOT"
+}
 
 ksp {
     arg("basePacket", "org.anime_game_servers.multi_proto.gi")
@@ -88,10 +97,6 @@ tasks {
             dependsOn("kspCommonMainKotlinMetadata")
     }
 }
-
-val isDynamicRuntime = providers
-    .gradleProperty("org.anime_game_servers.dynamicRuntime")
-    .orElse("false")
 
 ksp {
     arg("isDynamicRuntime", isDynamicRuntime.get())
