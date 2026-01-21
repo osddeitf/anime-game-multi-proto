@@ -74,6 +74,7 @@ object VersionIdentify {
             5254 -> listOf(Version.GI_6_0_0) //rsp 4889
             3956 -> listOf(Version.GI_6_1_0) //rsp 22487
             25923 -> listOf(Version.GI_6_2_0) //rsp 5104
+            21186 -> listOf(Version.GI_6_3_0) //rsp 4454
             else -> return null
         }
     }
