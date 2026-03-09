@@ -875,12 +875,16 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
 
         val args = MutableList<Any?>(modelInfo.args) { null }
         for (field in modelInfo.members.values) {
-            (properties[field] ?: field.defaultValue)
-                ?.let {
-                    // if value is non-null, wrap it if necessary (oneof case)
-                    field.dataWrapperConstructor?.invoke(it) ?: it
-                }
-                ?.let { args[field.dataIndex] = it }
+            val value = properties[field]
+
+            if (field.dataWrapperConstructor != null) {
+                if (!properties.contains(field)) continue
+                // wrap the value inside oneof case class
+                args[field.dataIndex] = field.dataWrapperConstructor.invoke(value)
+            }
+            else {
+                args[field.dataIndex] = value ?: field.defaultValue
+            }
         }
 
         for (member in modelInfo.invalidMembers.values) {
