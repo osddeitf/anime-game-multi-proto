@@ -461,8 +461,7 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
 
         for (enum in modelEnums) {
             if (enum == unknown) {
-                // the same as omitting the field in protobuf
-                forward[enum] = 0
+                // will be considered the same as omitting the field in protobuf
                 continue
             }
 
@@ -881,6 +880,9 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
                 if (!properties.contains(field)) continue
                 // wrap the value inside oneof case class
                 args[field.dataIndex] = field.dataWrapperConstructor.invoke(value)
+            }
+            else if (field.modelType == FieldDescriptorProto.Type.TYPE_ENUM && !field.fieldDescriptor.isRepeated()) {
+                args[field.dataIndex] = field.decodeEnum(0);    // either is enum with value of 0, or UNRECOGNISED
             }
             else {
                 args[field.dataIndex] = value ?: field.defaultValue
