@@ -880,12 +880,14 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
                 if (!properties.contains(field)) continue
                 // wrap the value inside oneof case class
                 args[field.dataIndex] = field.dataWrapperConstructor.invoke(value)
+                continue
             }
-            else if (field.modelType == FieldDescriptorProto.Type.TYPE_ENUM && !field.fieldDescriptor.isRepeated()) {
-                args[field.dataIndex] = field.decodeEnum(0);    // either is enum with value of 0, or UNRECOGNISED
+
+            args[field.dataIndex] = value ?: if (field.modelType == FieldDescriptorProto.Type.TYPE_ENUM && !field.fieldDescriptor.isRepeated()) {
+                field.decodeEnum(0);    // default to enum with value of 0, or UNRECOGNISED
             }
             else {
-                args[field.dataIndex] = value ?: field.defaultValue
+                field.defaultValue
             }
         }
 
