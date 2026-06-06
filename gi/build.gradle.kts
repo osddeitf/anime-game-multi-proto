@@ -3,6 +3,10 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 plugins {
     kotlin("multiplatform")
     id("com.google.devtools.ksp")
+    // npm publishing disabled for now: broken locally on Windows (Kotlin/npm-publish #187), registry
+    // configured later. The ESM package + .d.mts come from the Kotlin/JS plugin (jsNodeProductionLibrary
+    // Distribution), so this is only needed to run publishJsPackageToDefaultRegistry from CI. Re-enable then.
+    // kotlin("npm-publish") version "3.7.0"
 }
 
 val isDynamicRuntime = providers
@@ -31,9 +35,14 @@ kotlin {
         }
     }
     js(IR) {
+        useEsModules()
         nodejs()
         binaries.library()
         generateTypeScriptDefinitions()
+        compilerOptions {
+            target.set("es2015") // ES6+ output
+            freeCompilerArgs.add("-Xes-long-as-bigint") // Long -> TS bigint; es2015 alone is insufficient
+        }
     }
     mingwX64()
     linuxX64()
@@ -45,9 +54,18 @@ kotlin {
             dependencies {
                 api(project(":base"))
                 api(libs.bundles.common.ags.gi)
-                implementation(libs.bundles.proto.parsing)
+                // pbandk is only used by the static runtime (the excluded protos/** sources);
+                // dynamic mode delegates to ProtoRuntimeProvider, so keep it off the JS bundle.
+                if (isDynamicRuntime.get() != "true") {
+                    implementation(libs.bundles.proto.parsing)
+                }
             }
             kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin/")
+            // protos/** are the checked-in static-runtime sources (gitignored); in dynamic mode we use
+            // the KSP-generated models + descriptor runtime instead, so exclude them (and pbandk above).
+            if (isDynamicRuntime.get() == "true") {
+                kotlin.exclude("protos/**/*")
+            }
             sourceSets.configureEach {
             }
         }
@@ -106,3 +124,16 @@ publishing {
         }
     }
 }
+
+// npm publishing (ESM library). Re-enable together with the kotlin("npm-publish") plugin above when
+// publishing from CI. Registry URL/token via Gradle properties (npm.registry.url / npm.auth.token).
+/*
+npmPublish {
+    registries {
+        register("default") {
+            uri.set(uri(providers.gradleProperty("npm.registry.url").getOrElse("https://registry.npmjs.org")))
+            authToken.set(providers.gradleProperty("npm.auth.token").getOrElse(""))
+        }
+    }
+}
+*/

@@ -4,7 +4,6 @@ import org.khronos.webgl.Uint8Array
 
 // Node.js filesystem.
 @JsModule("fs")
-@JsNonModule
 external object fs {
     fun existsSync(path: String): Boolean
     fun readFileSync(path: String): Uint8Array          // binary -> Buffer (a Uint8Array)
@@ -13,7 +12,6 @@ external object fs {
 
 // protobuf.js descriptor extension: decodes a binary FileDescriptorSet (.desc).
 @JsModule("protobufjs/ext/descriptor")
-@JsNonModule
 external object protobufDescriptor {
     val FileDescriptorSet: FileDescriptorSetType
 }

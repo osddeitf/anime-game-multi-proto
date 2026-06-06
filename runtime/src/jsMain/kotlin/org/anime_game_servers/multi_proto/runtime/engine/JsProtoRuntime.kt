@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.js.ExperimentalJsExport::class)
+
 package org.anime_game_servers.multi_proto.runtime.engine
 
 import org.anime_game_servers.core.base.Version
@@ -74,6 +76,7 @@ class JsProtoRuntime : ProtoRuntime {
  * Wire the descriptor runtime into the gi provider. Call once at startup before using
  * Model.decodeFromByteArray / encodeToByteArray. (JS analog of the JVM ServiceLoader registration.)
  */
+@kotlin.js.JsExport
 fun register() {
     registerAllModels()
     registerProtoRuntime(JsProtoRuntime())

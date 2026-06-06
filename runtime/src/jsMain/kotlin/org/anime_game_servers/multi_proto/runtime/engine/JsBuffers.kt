@@ -6,7 +6,6 @@ import org.khronos.webgl.Uint8Array
 // protobuf.js Writer: a chunked, lazy-length writer. fork()/ldelim() emit length-delimited regions
 // without allocating+concatenating a temp buffer per sub-message — the fast path for encode.
 @JsModule("protobufjs/minimal")
-@JsNonModule
 external object protobuf {
     object util {
         val Long: ProtoLongCtor?

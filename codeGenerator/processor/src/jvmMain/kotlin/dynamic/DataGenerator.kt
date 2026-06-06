@@ -21,9 +21,11 @@ open class DataGenerator(
         super.addConstructor(file, classInfo)
         // data class can not be empty, so we use an empty normal class instead
         if (classInfo.modelMembers.isEmpty()) {
+            file += "@kotlin.js.JsExport\n"
             file += "class ${classInfo.name} : ${getImplementedModels(classInfo)} {\n"
             return
         }
+        file += "@kotlin.js.JsExport\n"
         file += "data class ${classInfo.name} @JvmOverloads constructor (\n"
         classInfo.modelMembers.forEach {
             file.id(4) += "var `${it.value.name.getVariableName()}`: ${getTypeString(it)} = ${

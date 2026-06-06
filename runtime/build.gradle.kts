@@ -1,6 +1,10 @@
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
+    // npm publishing disabled for now: broken locally on Windows (Kotlin/npm-publish #187), registry
+    // configured later. The ESM package + .d.mts come from the Kotlin/JS plugin (jsNodeProductionLibrary
+    // Distribution), so this is only needed to run publishJsPackageToDefaultRegistry from CI. Re-enable then.
+    // kotlin("npm-publish") version "3.7.0"
 }
 
 group = "org.anime_game_servers.multi_proto"
@@ -14,7 +18,14 @@ kotlin {
         }
     }
     js(IR) {
+        useEsModules()
         nodejs()
+        binaries.library()
+        generateTypeScriptDefinitions()
+        compilerOptions {
+            target.set("es2015") // ES6+ output
+            freeCompilerArgs.add("-Xes-long-as-bigint") // Long -> TS bigint; es2015 alone is insufficient
+        }
     }
     mingwX64()
     linuxX64()
@@ -57,3 +68,16 @@ publishing {
         }
     }
 }
+
+// npm publishing (ESM library). Re-enable together with the kotlin("npm-publish") plugin above when
+// publishing from CI. Registry URL/token via Gradle properties (npm.registry.url / npm.auth.token).
+/*
+npmPublish {
+    registries {
+        register("default") {
+            uri.set(uri(providers.gradleProperty("npm.registry.url").getOrElse("https://registry.npmjs.org")))
+            authToken.set(providers.gradleProperty("npm.auth.token").getOrElse(""))
+        }
+    }
+}
+*/

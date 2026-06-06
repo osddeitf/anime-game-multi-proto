@@ -19,6 +19,10 @@ abstract class BaseGenerator(
     classInfoCache: MutableMap<KSType, ClassInfo>,
 ): Generator(logger, resolver, classInfoCache) {
     override fun createClassForProto(file: OutputStream, classInfo:ClassInfo) {
+        // File-level opt-in for @JsExport (TS typings) + silence the per-field non-exportable noise
+        // (Long is exportable; List/Map/oneof/Version degrade to `any`). No-op on JVM/native.
+        file += "@file:kotlin.OptIn(kotlin.js.ExperimentalJsExport::class)\n"
+        file += "@file:kotlin.Suppress(\"NON_EXPORTABLE_TYPE\")\n\n"
         file += "package ${classInfo.packageName}\n"
         addImports(file, classInfo)
         addConstructor(file, classInfo)

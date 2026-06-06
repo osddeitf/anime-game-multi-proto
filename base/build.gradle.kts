@@ -13,9 +13,14 @@ kotlin {
         }
     }
     js(IR) {
+        useEsModules()
         nodejs()
         binaries.library()
         generateTypeScriptDefinitions()
+        compilerOptions {
+            target.set("es2015") // ES6+ output
+            freeCompilerArgs.add("-Xes-long-as-bigint") // Long -> TS bigint; es2015 alone is insufficient
+        }
     }
     mingwX64()
     linuxX64()

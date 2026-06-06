@@ -13,6 +13,7 @@ class EnumGenerator(
 ) : BaseGenerator(logger, resolver, classInfoCache) {
     override fun addConstructor(file: OutputStream, classInfo: ClassInfo) {
         super.addConstructor(file, classInfo)
+        file += "@kotlin.js.JsExport\n"
         file += "enum class ${classInfo.name}(\n"
         file.id(4) += "var names: Set<String>,\n"
         classInfo.modelMembers.filter { it.value.isPrimaryConstructorMember }.forEach {
