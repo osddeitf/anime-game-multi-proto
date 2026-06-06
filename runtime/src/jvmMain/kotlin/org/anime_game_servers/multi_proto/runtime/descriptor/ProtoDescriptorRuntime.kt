@@ -696,7 +696,7 @@ class ProtoDescriptorRuntime(val version: String, val protoDescriptor: ProtobufD
         encryption.applyDecryption(value!!) as T
 
     private fun ModelPropertyInfo.decrypt32(value: Long) =
-        encryption.applyEncryption(value.toInt())
+        encryption.applyDecryption(value.toInt())
 
     private fun ModelPropertyInfo.decodeZigzag(int: Int) =
         if (fieldDescriptor.isZigzag()) int.asZigZag() else int
