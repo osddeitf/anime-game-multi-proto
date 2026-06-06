@@ -574,9 +574,10 @@ class ProtoDescriptorRuntime(
                 FieldType.MESSAGE -> {
                     val refName = member.modelTypeName
                     val info = modelCache[refName] ?: error("encode: Model $refName expected")
-                    val embedded = buffers.writer()
-                    convertModelToProto(info, data, embedded, refName)
-                    tag(); out.writeLengthDelimited(embedded.toByteArray())
+                    tag()
+                    out.fork()
+                    convertModelToProto(info, data, out, refName)
+                    out.ldelim()
                 }
                 FieldType.STRING -> { val s = data as String; if (s.isEmpty()) return; tag(); out.writeLengthDelimited(s.encodeToByteArray()) }
                 FieldType.BYTES -> { val b = data as ByteArray; if (b.isEmpty()) return; tag(); out.writeLengthDelimited(b) }
@@ -586,39 +587,35 @@ class ProtoDescriptorRuntime(
 
         fun writeMember(out: ProtoWriter, member: ModelPropertyInfo, data: Any?) {
             data ?: return
-            try {
-                when {
-                    data is List<*> && data.isEmpty() -> return
-                    data is Map<*, *> && data.isEmpty() -> return
-                    member.category == MemberProtoCategory.Enum && data === enumCache[member.modelTypeName]?.unknown -> return
-                }
-                when (data) {
-                    is List<*> -> {
-                        val packed = member.singularFieldWire != 2
-                        if (packed) {
-                            val tmp = buffers.writer()
-                            data.forEach { it?.let { e -> writeEncoded(tmp, member, e, true) } }
-                            out.writeFieldTag(member.fieldNumber, 2)
-                            out.writeLengthDelimited(tmp.toByteArray())
-                        } else {
-                            data.forEach { it?.let { e -> writeEncoded(out, member, e) } }
-                        }
+            when {
+                data is List<*> && data.isEmpty() -> return
+                data is Map<*, *> && data.isEmpty() -> return
+                member.category == MemberProtoCategory.Enum && data === enumCache[member.modelTypeName]?.unknown -> return
+            }
+            when (data) {
+                is List<*> -> {
+                    val packed = member.singularFieldWire != 2
+                    if (packed) {
+                        out.writeFieldTag(member.fieldNumber, 2)
+                        out.fork()
+                        data.forEach { it?.let { e -> writeEncoded(out, member, e, true) } }
+                        out.ldelim()
+                    } else {
+                        data.forEach { it?.let { e -> writeEncoded(out, member, e) } }
                     }
-                    is Map<*, *> -> {
-                        val key = member.mapKey ?: error("encode: map key expected")
-                        val value = member.mapValue ?: error("encode: map value expected")
-                        for ((k, v) in data) {
-                            val entry = buffers.writer()
-                            writeMember(entry, key, k)
-                            writeMember(entry, value, v)
-                            out.writeFieldTag(member.fieldNumber, 2)
-                            out.writeLengthDelimited(entry.toByteArray())
-                        }
-                    }
-                    else -> writeEncoded(out, member, data)
                 }
-            } catch (ex: Exception) {
-                logger?.error(ex) { "Encode protobuf failed for $name" }
+                is Map<*, *> -> {
+                    val key = member.mapKey ?: error("encode: map key expected")
+                    val value = member.mapValue ?: error("encode: map value expected")
+                    for ((k, v) in data) {
+                        out.writeFieldTag(member.fieldNumber, 2)
+                        out.fork()
+                        writeMember(out, key, k)
+                        writeMember(out, value, v)
+                        out.ldelim()
+                    }
+                }
+                else -> writeEncoded(out, member, data)
             }
         }
 
@@ -626,18 +623,11 @@ class ProtoDescriptorRuntime(
             val wrapper = values.getOrNull(oneOf.dataIndex) ?: continue
             val caseName = oneOf.oneOf.caseNameOf(wrapper)
             val member = oneOf.casesByName[caseName] ?: continue
-            val value = oneOf.oneOf.unwrap(wrapper)
-            // each member encoded into a temp buffer for failsafe isolation, then appended
-            val tmp = buffers.writer()
-            writeMember(tmp, member, value)
-            writer.writeBytes(tmp.toByteArray())
+            writeMember(writer, member, oneOf.oneOf.unwrap(wrapper))
         }
 
         for (member in modelInfo.writeOrder) {
-            val value = values.getOrNull(member.dataIndex)
-            val tmp = buffers.writer()
-            writeMember(tmp, member, value)
-            writer.writeBytes(tmp.toByteArray())
+            writeMember(writer, member, values.getOrNull(member.dataIndex))
         }
     }
 }

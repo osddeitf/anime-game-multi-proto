@@ -72,49 +72,9 @@ fun Long.encodeZigZag() = (this shl 1) xor (this shr 63)
 fun Long.isSafeInt() = toULong() <= UInt.MAX_VALUE.toULong()
 
 // ---- writers ----
-
-fun ProtoWriter.writeVarint(value: Long) {
-    var v = value
-    while (true) {
-        if ((v and 0x7FL.inv()) == 0L) {
-            writeByte(v.toInt())
-            return
-        }
-        writeByte(((v and 0x7F) or 0x80).toInt())
-        v = v ushr 7
-    }
-}
-
-// NOTE: 32-bit varint (no sign extension); used for uint32/lengths. Distinct from the Long variant.
-fun ProtoWriter.writeVarint(value: Int) {
-    var v = value
-    while (true) {
-        if ((v and 0x7F.inv()) == 0) {
-            writeByte(v)
-            return
-        }
-        writeByte((v and 0x7F) or 0x80)
-        v = v ushr 7
-    }
-}
-
-fun ProtoWriter.writeFixed32(bits: Int) {
-    writeByte(bits and 0xFF)
-    writeByte((bits ushr 8) and 0xFF)
-    writeByte((bits ushr 16) and 0xFF)
-    writeByte((bits ushr 24) and 0xFF)
-}
-
-fun ProtoWriter.writeFixed64(bits: Long) {
-    for (i in 0 until 8) writeByte(((bits ushr (8 * i)) and 0xFF).toInt())
-}
+// Varint/fixed/length-delimited writing is provided by the ProtoWriter implementation (so the JS
+// writer can delegate to protobuf.js). Only the tag helper is shared here.
 
 fun ProtoWriter.writeFieldTag(number: Int, wire: Int) {
     writeVarint((number shl 3) or wire)
-}
-
-/** Write a length-delimited block: varint(size) followed by the bytes. */
-fun ProtoWriter.writeLengthDelimited(bytes: ByteArray) {
-    writeVarint(bytes.size)
-    writeBytes(bytes)
 }

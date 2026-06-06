@@ -28,6 +28,12 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
             }
         }
+        jsMain {
+            dependencies {
+                implementation(npm("protobufjs", "7.4.0"))
+                implementation(npm("long", "5.2.3")) // enables exact 64-bit via protobuf.util.Long
+            }
+        }
         jvmMain {
             dependencies {
                 compileOnly(project(":gi"))
