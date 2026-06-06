@@ -51,8 +51,6 @@ kotlin {
                 compileOnly(project(":base"))
                 compileOnly("org.slf4j:slf4j-api:1.7.36")
                 compileOnly("io.github.oshai:kotlin-logging-jvm:7.0.6")
-                implementation("org.anime_game_servers.core:gi:0.2")
-                implementation("org.jetbrains.kotlin:kotlin-reflect")
                 implementation("com.google.protobuf:protobuf-java:4.31.1")
                 implementation("io.netty:netty-buffer:4.2.9.Final")
             }
