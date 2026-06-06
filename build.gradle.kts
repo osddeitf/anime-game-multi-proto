@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.kotlinx.serialization) apply false
     alias(libs.plugins.ksp) apply false
+    kotlin("jvm") version "2.4.0"
 }
 group = "org.anime_game_servers.multi_proto"
 version = libs.versions.anime.game.multi.proto
