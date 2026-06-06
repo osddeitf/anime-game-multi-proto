@@ -23,6 +23,8 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
+                implementation(project(":base"))
+                implementation(project(":gi"))
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
             }
         }
