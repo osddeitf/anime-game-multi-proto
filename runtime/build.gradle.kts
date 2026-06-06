@@ -34,8 +34,9 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
+                // base only — runtime no longer depends on gi (consumer bridges via ProtoModelRegistry),
+                // so gi's model types stay out of runtime's published package/typings.
                 implementation(project(":base"))
-                implementation(project(":gi"))
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
             }
         }
@@ -47,10 +48,7 @@ kotlin {
         }
         jvmMain {
             dependencies {
-                compileOnly(project(":gi"))
-                compileOnly(project(":base"))
-                compileOnly("org.slf4j:slf4j-api:1.7.36")
-                compileOnly("io.github.oshai:kotlin-logging-jvm:7.0.6")
+                implementation("io.github.oshai:kotlin-logging-jvm:7.0.6")
                 implementation("com.google.protobuf:protobuf-java:4.31.1")
                 implementation("io.netty:netty-buffer:4.2.9.Final")
             }

@@ -1,9 +1,12 @@
-package org.anime_game_servers.multi_proto.gi
+package org.anime_game_servers.multi_proto.core.interfaces
 
 import org.anime_game_servers.core.base.Version
-import org.anime_game_servers.multi_proto.core.interfaces.PacketIdProvider
 import kotlin.reflect.KClass
 
+/**
+ * The proto encode/decode runtime. Implemented in the `runtime` module; the active instance is wired
+ * into gi's `ProtoModelRegistry` via `ProtoModelRegistry.use(...)`. Generated models delegate to it.
+ */
 interface ProtoRuntime {
     fun getVersionRuntime(version: Version): ProtoVersionRuntime?
     fun getPacketMapper(version: Version): PacketIdProvider?
@@ -14,9 +17,4 @@ interface ProtoRuntime {
 interface ProtoVersionRuntime {
     fun getObfuscatedName(name: String): String?
     fun getDeobfuscatedName(name: String): String?
-}
-
-// commonMain
-expect object ProtoRuntimeProvider {
-    val service: ProtoRuntime
 }

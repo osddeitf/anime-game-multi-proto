@@ -38,7 +38,7 @@ abstract class BaseGenerator(
         file += "import ${Version::class.java.canonicalName}\n"+
                 "import ${AddedIn::class.java.canonicalName}\n"+
                 "import ${RemovedIn::class.java.canonicalName}\n"+
-                "import org.anime_game_servers.multi_proto.gi.ProtoRuntimeProvider\n"+
+                "import org.anime_game_servers.multi_proto.gi.ProtoModelRegistry\n"+
                 "import kotlin.jvm.JvmStatic\n"+
                 "import kotlin.jvm.JvmOverloads\n"
     }

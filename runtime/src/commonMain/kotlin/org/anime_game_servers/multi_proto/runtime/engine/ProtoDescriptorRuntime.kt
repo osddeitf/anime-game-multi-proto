@@ -5,10 +5,9 @@ import org.anime_game_servers.multi_proto.core.registry.EnumRegistration
 import org.anime_game_servers.multi_proto.core.registry.ModelRegistration
 import org.anime_game_servers.multi_proto.core.registry.OneOf
 import org.anime_game_servers.multi_proto.core.registry.OneOfCase
-import org.anime_game_servers.multi_proto.core.registry.ProtoModelRegistry
 import org.anime_game_servers.multi_proto.core.registry.Property
 import org.anime_game_servers.multi_proto.core.registry.PropertyKind
-import org.anime_game_servers.multi_proto.gi.ProtoVersionRuntime
+import org.anime_game_servers.multi_proto.core.interfaces.ProtoVersionRuntime
 import org.anime_game_servers.multi_proto.runtime.common.ProtoMappingConfig
 import org.anime_game_servers.multi_proto.runtime.common.applyDecryption
 import org.anime_game_servers.multi_proto.runtime.common.applyEncryption
@@ -24,14 +23,17 @@ interface EngineLogger {
 }
 
 /**
- * Platform-neutral descriptor-driven proto encoder/decoder. Model structure comes from the KSP
- * [ProtoModelRegistry] (no reflection); proto structure comes from [protoDescriptor]; bytes flow
+ * Platform-neutral descriptor-driven proto encoder/decoder. Model structure comes from the KSP-generated
+ * [models]/[enums] registers (no reflection); proto structure comes from [protoDescriptor]; bytes flow
  * through [buffers]. Ported from the original JVM/Netty/reflection implementation.
  */
 class ProtoDescriptorRuntime(
     val version: String,
     val protoDescriptor: ProtobufDescriptor,
     private val buffers: ProtoBufferFactory,
+    // KSP-generated model/enum metadata, keyed by simpleName (the runtime impl's register).
+    private val models: Map<String, ModelRegistration>,
+    private val enums: Map<String, EnumRegistration>,
 ) : ProtoVersionRuntime {
 
     var logger: EngineLogger? = null
@@ -320,7 +322,7 @@ class ProtoDescriptorRuntime(
         while (queue.isNotEmpty()) {
             val name = queue.removeLast()
             val proto = refs[name]!!
-            val enumReg = ProtoModelRegistry.enum(name)
+            val enumReg = enums[name]
             if (enumReg != null) {
                 if (!enumCache.containsKey(name)) {
                     enumCache[name] = try {
@@ -334,7 +336,7 @@ class ProtoDescriptorRuntime(
             } else {
                 if (!modelCache.containsKey(name)) {
                     modelCache[name] = try {
-                        val reg = ProtoModelRegistry.model(name) ?: error("No registration for model $name")
+                        val reg = models[name] ?: error("No registration for model $name")
                         val message = lookupMessage(proto) ?: error("Proto message $proto missing for $name")
                         prepareModel(queue, refs, name, reg, message)
                     } catch (ex: Exception) {

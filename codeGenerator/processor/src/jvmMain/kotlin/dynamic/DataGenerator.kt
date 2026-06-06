@@ -59,7 +59,7 @@ open class DataGenerator(
 
     override fun addEncodeMethods(file: OutputStream, classInfo: ClassInfo) {
         file.id(4) += "override fun encodeToByteArray(version:$VERSION_ENUM_CLASS_NAME) : ByteArray? {\n"
-        file.id(8) += "return ProtoRuntimeProvider.service.encodeToByteArray(\n"
+        file.id(8) += "return ProtoModelRegistry.service.encodeToByteArray(\n"
         file.id(12) += "version,\n"
         file.id(12) += "${classInfo.name}::class,\n"
         file.id(12) += "this,\n"
@@ -71,7 +71,7 @@ open class DataGenerator(
         file.id(4) += "companion object {\n"
         file.id(8) += "@JvmStatic\n"
         file.id(8) += "fun decodeFromByteArray(data: ByteArray, version:$VERSION_ENUM_CLASS_NAME): ${classInfo.name} {\n"
-        file.id(12) += "val obj: ${classInfo.name}? = ProtoRuntimeProvider.service.decodeFromByteArray(\n"
+        file.id(12) += "val obj: ${classInfo.name}? = ProtoModelRegistry.service.decodeFromByteArray(\n"
         file.id(16) += "version,\n"
         file.id(16) += "${classInfo.name}::class,\n"
         file.id(16) += "data,\n"

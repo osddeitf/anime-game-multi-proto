@@ -72,18 +72,3 @@ interface EnumRegistration {
     val entries: List<EnumEntry>
     val unrecognised: Any
 }
-
-/** Global registry the JS runtime consults; populated by the generated `registerAllModels()`. */
-object ProtoModelRegistry {
-    private val models = HashMap<String, ModelRegistration>()
-    private val enums = HashMap<String, EnumRegistration>()
-
-    fun register(reg: ModelRegistration) { models[reg.simpleName] = reg }
-    fun register(reg: EnumRegistration) { enums[reg.simpleName] = reg }
-
-    fun model(simpleName: String): ModelRegistration? = models[simpleName]
-    fun enum(simpleName: String): EnumRegistration? = enums[simpleName]
-
-    fun modelCount(): Int = models.size
-    fun enumCount(): Int = enums.size
-}

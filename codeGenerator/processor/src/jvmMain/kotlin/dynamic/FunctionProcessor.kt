@@ -60,7 +60,10 @@ class FunctionProcessor(
         generateFiles(commandGenerator, protoCommands)
 
         logger.info("[time] generate registry aggregator")
-        generateRegistryAggregator((protoEnums.values + protoModels.values + protoCommands.values).toList())
+        generateRegistryAggregator(
+            models = (protoModels.values + protoCommands.values).toList(),
+            enums = protoEnums.values.toList(),
+        )
 
 
         /*val symbols = resolver.getSymbolsWithAnnotation("org.anime_game_servers.annotations.ProtoModel")
@@ -119,20 +122,24 @@ class FunctionProcessor(
     }
 
     /**
-     * Emit a single aggregator with registerAllModels() that registers every generated model/enum
-     * registration into ProtoModelRegistry. The JS runtime calls this once via register(). Marked
-     * aggregating so KSP regenerates it whenever any model changes.
+     * Emit allModels()/allEnums() listing every generated registration, consumed by
+     * ProtoModelRegistry.getModels()/getEnums(). Aggregating so KSP regenerates on any model change.
      */
-    private fun generateRegistryAggregator(infos: List<ClassInfo>) {
-        if (infos.isEmpty()) return
-        val files = infos.mapNotNull { it.definition.containingFile }.distinct()
+    private fun generateRegistryAggregator(models: List<ClassInfo>, enums: List<ClassInfo>) {
+        val all = models + enums
+        if (all.isEmpty()) return
+        val files = all.mapNotNull { it.definition.containingFile }.distinct()
 
         val sb = StringBuilder()
         sb.append("package org.anime_game_servers.multi_proto.gi\n\n")
-        sb.append("fun registerAllModels() {\n")
-        for (info in infos) {
-            sb.append("    org.anime_game_servers.multi_proto.core.registry.ProtoModelRegistry.register(")
-                .append(info.packageName).append('.').append(info.name).append("_Registration)\n")
+        sb.append("internal fun allModels(): List<org.anime_game_servers.multi_proto.core.registry.ModelRegistration> = buildList {\n")
+        for (info in models) {
+            sb.append("    add(").append(info.packageName).append('.').append(info.name).append("_Registration)\n")
+        }
+        sb.append("}\n\n")
+        sb.append("internal fun allEnums(): List<org.anime_game_servers.multi_proto.core.registry.EnumRegistration> = buildList {\n")
+        for (info in enums) {
+            sb.append("    add(").append(info.packageName).append('.').append(info.name).append("_Registration)\n")
         }
         sb.append("}\n")
 
