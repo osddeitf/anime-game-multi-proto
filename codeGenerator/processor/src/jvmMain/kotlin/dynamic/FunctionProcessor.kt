@@ -59,6 +59,9 @@ class FunctionProcessor(
         logger.info("[time] generate commands")
         generateFiles(commandGenerator, protoCommands)
 
+        logger.info("[time] generate registry aggregator")
+        generateRegistryAggregator((protoEnums.values + protoModels.values + protoCommands.values).toList())
+
 
         /*val symbols = resolver.getSymbolsWithAnnotation("org.anime_game_servers.annotations.ProtoModel")
             .filterIsInstance<KSClassDeclaration>()
@@ -113,6 +116,33 @@ class FunctionProcessor(
 
     override fun getTargetPackageName(symbol: KSClassDeclaration): String {
         return symbol.packageName.asString().replaceFirst("data.","messages.")
+    }
+
+    /**
+     * Emit a single aggregator with registerAllModels() that registers every generated model/enum
+     * registration into ProtoModelRegistry. The JS runtime calls this once via register(). Marked
+     * aggregating so KSP regenerates it whenever any model changes.
+     */
+    private fun generateRegistryAggregator(infos: List<ClassInfo>) {
+        if (infos.isEmpty()) return
+        val files = infos.mapNotNull { it.definition.containingFile }.distinct()
+
+        val sb = StringBuilder()
+        sb.append("package org.anime_game_servers.multi_proto.gi\n\n")
+        sb.append("fun registerAllModels() {\n")
+        for (info in infos) {
+            sb.append("    org.anime_game_servers.multi_proto.core.registry.ProtoModelRegistry.register(")
+                .append(info.packageName).append('.').append(info.name).append("_Registration)\n")
+        }
+        sb.append("}\n")
+
+        val output = codeGenerator.createNewFile(
+            dependencies = Dependencies(aggregating = true, sources = files.toTypedArray()),
+            packageName = "org.anime_game_servers.multi_proto.gi",
+            fileName = "GeneratedModelRegistry"
+        )
+        output.write(sb.toString().toByteArray())
+        output.close()
     }
 
     /*private fun createClassForProto(resolver: Resolver, classInfo: BaseGenerator.ClassInfo, generator: BaseGenerator) {

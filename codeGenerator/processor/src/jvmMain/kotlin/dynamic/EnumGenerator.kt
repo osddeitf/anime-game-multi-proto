@@ -48,4 +48,19 @@ class EnumGenerator(
     override fun addClosure(file: OutputStream, classInfo: ClassInfo) {
         file += "}"
     }
+
+    override fun addRegistration(file: OutputStream, classInfo: ClassInfo) {
+        val name = classInfo.name
+        file += "\nobject ${name}_Registration : $REGISTRY_PACKAGE.EnumRegistration {\n"
+        file.id(4) += "override val simpleName = \"$name\"\n"
+        file.id(4) += "override val entries = listOf<$REGISTRY_PACKAGE.EnumEntry>(\n"
+        classInfo.declarations.forEach {
+            val en = it.simpleName.asString()
+            file.id(8) += "$REGISTRY_PACKAGE.EnumEntry(\"$en\", $name.$en, false),\n"
+        }
+        file.id(8) += "$REGISTRY_PACKAGE.EnumEntry(\"$UNRECOGNISED_ENUM_NAME\", $name.$UNRECOGNISED_ENUM_NAME, true),\n"
+        file.id(4) += ")\n"
+        file.id(4) += "override val unrecognised = $name.$UNRECOGNISED_ENUM_NAME\n"
+        file += "}\n"
+    }
 }

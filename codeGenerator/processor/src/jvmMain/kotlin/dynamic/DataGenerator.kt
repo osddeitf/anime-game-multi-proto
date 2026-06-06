@@ -87,4 +87,132 @@ open class DataGenerator(
     override fun addClosure(file: OutputStream, classInfo: ClassInfo) {
         file += "}"
     }
+
+    // ---- registry (replaces JVM reflection on JS) ----
+
+    override fun addRegistration(file: OutputStream, classInfo: ClassInfo) {
+        val name = classInfo.name
+        val members = classInfo.modelMembers.entries.toList()
+
+        file += "\nobject ${name}_Registration : $REGISTRY_PACKAGE.ModelRegistration {\n"
+        file.id(4) += "override val simpleName = \"$name\"\n"
+
+        file.id(4) += "override val properties = listOf<$REGISTRY_PACKAGE.Property>(\n"
+        members.forEachIndexed { index, entry ->
+            file.id(8) += emitProperty(classInfo, entry, index) + ",\n"
+        }
+        file.id(4) += ")\n"
+
+        file.id(4) += "override fun create(values: Array<Any?>): Any {\n"
+        file.id(8) += "val m = $name()\n"
+        members.forEachIndexed { index, entry ->
+            val varName = entry.value.name.getVariableName()
+            file.id(8) += "(values[$index] as ${castType(classInfo, entry)}?)?.let { m.`$varName` = it }\n"
+        }
+        file.id(8) += "return m\n"
+        file.id(4) += "}\n"
+
+        file.id(4) += "override fun read(model: Any): Array<Any?> {\n"
+        file.id(8) += "model as $name\n"
+        if (members.isEmpty()) {
+            file.id(8) += "return arrayOf()\n"
+        } else {
+            file.id(8) += "return arrayOf(\n"
+            members.forEach { entry ->
+                file.id(12) += "model.`${entry.value.name.getVariableName()}`,\n"
+            }
+            file.id(8) += ")\n"
+        }
+        file.id(4) += "}\n"
+
+        file += "}\n"
+    }
+
+    private fun emitProperty(classInfo: ClassInfo, entry: Map.Entry<String, MemberInfo>, index: Int): String {
+        val member = entry.value
+        val type = member.type
+        val propName = member.name.getVariableName()
+        val altNames = member.names.filter { it != member.name }
+        val altStr = "listOf(" + altNames.joinToString(", ") { "\"$it\"" } + ")"
+        val sb = StringBuilder()
+        sb.append("$REGISTRY_PACKAGE.Property(name = \"$propName\", altNames = $altStr, dataIndex = $index, ")
+        when (Type.byType(type, this)) {
+            Type.COLLECTION -> {
+                val el = type.arguments.firstOrNull()?.type?.resolve()
+                sb.append("kind = $REGISTRY_PACKAGE.PropertyKind.LIST")
+                if (el != null) {
+                    sb.append(", elementKind = $REGISTRY_PACKAGE.PropertyKind.${kindOf(el)}")
+                    refSimpleName(el)?.let { sb.append(", modelTypeName = \"$it\"") }
+                }
+            }
+            Type.MAP -> {
+                val k = type.arguments.getOrNull(0)?.type?.resolve()
+                val v = type.arguments.getOrNull(1)?.type?.resolve()
+                sb.append("kind = $REGISTRY_PACKAGE.PropertyKind.MAP")
+                if (k != null) {
+                    sb.append(", keyKind = $REGISTRY_PACKAGE.PropertyKind.${kindOf(k)}")
+                    refSimpleName(k)?.let { sb.append(", keyModelTypeName = \"$it\"") }
+                }
+                if (v != null) {
+                    sb.append(", elementKind = $REGISTRY_PACKAGE.PropertyKind.${kindOf(v)}")
+                    refSimpleName(v)?.let { sb.append(", modelTypeName = \"$it\"") }
+                }
+            }
+            Type.ONE_OF -> {
+                sb.append("kind = $REGISTRY_PACKAGE.PropertyKind.ONEOF")
+                classInfo.oneOfs[entry.key]?.let { sb.append(", oneOf = ${emitOneOf(classInfo, it)}") }
+            }
+            else -> {
+                sb.append("kind = $REGISTRY_PACKAGE.PropertyKind.${kindOf(type)}")
+                refSimpleName(type)?.let { sb.append(", modelTypeName = \"$it\"") }
+            }
+        }
+        sb.append(")")
+        return sb.toString()
+    }
+
+    private fun emitOneOf(classInfo: ClassInfo, oneOf: OneOfData): String {
+        val wrapper = "${classInfo.name}.${oneOf.wrapperName}"
+        val cases = oneOf.oneOfClassMap.entries.mapNotNull { (nm, ot) ->
+            val model = classInfoCache[ot.kSType] ?: return@mapNotNull null
+            val wrapped = "${model.packageName}.${model.name}"
+            val caseClass = nm.getClassName()
+            "$REGISTRY_PACKAGE.OneOfCase(caseName = \"$caseClass\", wrappedTypeName = \"${model.name}\", " +
+                "wrap = { v -> $wrapper.$caseClass(v as $wrapped) })"
+        }
+        return "$REGISTRY_PACKAGE.OneOf(cases = listOf(${cases.joinToString(", ")}), " +
+            "caseNameOf = { w -> w::class.simpleName!! }, " +
+            "unwrap = { w -> (w as $wrapper<*>).value })"
+    }
+
+    private fun castType(classInfo: ClassInfo, entry: Map.Entry<String, MemberInfo>): String {
+        return if (Type.byType(entry.value.type, this) == Type.ONE_OF) {
+            val oneOf = classInfo.oneOfs[entry.key]
+            "${classInfo.name}.${oneOf?.wrapperName ?: entry.value.name.getClassName()}<*>"
+        } else {
+            getTypeString(entry).removeSuffix("?")
+        }
+    }
+
+    private fun kindOf(type: KSType): String = when (Type.byType(type, this)) {
+        Type.SIMPLE -> when (type.declaration.simpleName.asString()) {
+            "Long" -> "LONG"
+            "Float" -> "FLOAT"
+            "Double" -> "DOUBLE"
+            "Boolean" -> "BOOLEAN"
+            "String" -> "STRING"
+            else -> "INT"
+        }
+        Type.BYTE_ARRAY -> "BYTE_ARRAY"
+        Type.COLLECTION -> "LIST"
+        Type.MAP -> "MAP"
+        Type.ENUM -> "ENUM"
+        Type.ONE_OF -> "ONEOF"
+        Type.DATA, Type.MAP_ENTRY -> "DATA"
+    }
+
+    private fun refSimpleName(type: KSType): String? = when (Type.byType(type, this)) {
+        Type.ENUM, Type.DATA -> type.declaration.simpleName.asString()
+        else -> null
+    }
 }

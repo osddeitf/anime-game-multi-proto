@@ -9,6 +9,9 @@ import org.anime_game_servers.core.base.annotations.AddedIn
 import org.anime_game_servers.core.base.annotations.RemovedIn
 import java.io.OutputStream
 
+/** Package of the compile-time model registry (in :base) consumed by the JS runtime. */
+internal const val REGISTRY_PACKAGE = "org.anime_game_servers.multi_proto.core.registry"
+
 //TODO keep AddedIn/RemovedIn annotations
 abstract class BaseGenerator(
     logger: KSPLogger,
@@ -23,6 +26,7 @@ abstract class BaseGenerator(
         addEncodeMethods(file, classInfo)
         addCompanionObject(file, classInfo)
         addClosure(file, classInfo)
+        addRegistration(file, classInfo)
         file.close()
     }
 
@@ -60,6 +64,12 @@ abstract class BaseGenerator(
     }
 
     open fun addClosure(file: OutputStream, classInfo: ClassInfo) {}
+
+    /**
+     * Emit a top-level registration object (after the model/enum) carrying the Kotlin-side metadata
+     * the JS runtime needs in place of reflection. No-op by default; implemented for data/enum models.
+     */
+    open fun addRegistration(file: OutputStream, classInfo: ClassInfo) {}
 
 
     protected fun String.getVariableName():String{
