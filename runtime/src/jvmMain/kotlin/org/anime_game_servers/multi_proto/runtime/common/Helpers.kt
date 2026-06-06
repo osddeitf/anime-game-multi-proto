@@ -38,8 +38,6 @@ fun packetMapperFromCSVStream(inputStream: InputStream): PacketIdProvider {
     }
 }
 
-val typoMap = mapOf("retCode" to "retcode")
-fun fixTypo(name: String) = typoMap[name] ?: name
 fun KType.prettyString(): String {
     val classifier = classifier as? KClass<*> ?: return toString()
     val baseName = classifier.simpleName ?: classifier.toString()
@@ -62,18 +60,6 @@ fun Type.prettyString(): String = when (this) {
 
     else -> toString()
 }
-
-fun String.toPascalCase() = this
-    .split('_', '-', ' ')
-    .filter { it.isNotEmpty() }
-    .joinToString("") {
-        it.replaceFirstChar(Char::uppercase)
-    }
-
-fun String.toSnakeCase(): String =
-    this.replace(Regex("([a-z])([A-Z])"), "$1_$2") // split camelCase
-        .replace(Regex("[\\s-]+"), "_")            // replace spaces/dashes with _
-        .lowercase()
 
 fun defaultMemberValue(type: KClass<*>): Any? = when (type) {
     Boolean::class -> false

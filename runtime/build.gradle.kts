@@ -21,13 +21,17 @@ kotlin {
     linuxArm64()
 
     sourceSets {
+        commonMain {
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+            }
+        }
         jvmMain {
             dependencies {
                 compileOnly(project(":gi"))
                 compileOnly(project(":base"))
                 compileOnly("org.slf4j:slf4j-api:1.7.36")
                 compileOnly("io.github.oshai:kotlin-logging-jvm:7.0.6")
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
                 implementation("org.anime_game_servers.core:gi:0.2")
                 implementation("org.jetbrains.kotlin:kotlin-reflect")
                 implementation("com.google.protobuf:protobuf-java:4.31.1")
