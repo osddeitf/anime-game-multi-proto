@@ -30,8 +30,8 @@ kotlin {
         }
         jsMain {
             dependencies {
-                implementation(npm("protobufjs", "7.4.0"))
-                implementation(npm("long", "5.2.3")) // enables exact 64-bit via protobuf.util.Long
+                implementation(npm("protobufjs", "8.6.0"))
+                implementation(npm("long", "5.3.2")) // enables exact 64-bit via protobuf.util.Long
             }
         }
         jvmMain {
