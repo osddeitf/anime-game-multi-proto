@@ -112,6 +112,15 @@ tasks {
     }
 }
 
+// The bundled packet-id CSVs (commonMain resources) are only consumed by the static runtime; the dynamic
+// runtime reads packets.csv from config/<version>/ at runtime. Keep them out of every packaged artifact:
+// the *ProcessResources tasks (JVM jar, metadata) and the JS library distribution are all Copy tasks.
+if (isDynamicRuntime.get() == "true") {
+    tasks.withType<Copy>().configureEach {
+        exclude("package_ids/**")
+    }
+}
+
 ksp {
     arg("isDynamicRuntime", isDynamicRuntime.get())
 }
