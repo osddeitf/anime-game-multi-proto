@@ -147,16 +147,6 @@ class ProtoDescriptorRuntime(
         }
     }
 
-    private fun categoryOf(property: Property, refKind: PropertyKind): MemberProtoCategory = when (property.kind) {
-        PropertyKind.LIST -> MemberProtoCategory.Repeated
-        PropertyKind.MAP -> MemberProtoCategory.Map
-        else -> when (refKind) {
-            PropertyKind.ENUM -> MemberProtoCategory.Enum
-            PropertyKind.DATA -> MemberProtoCategory.Embedded
-            else -> MemberProtoCategory.Normal
-        }
-    }
-
     private fun matchField(name: String, protoFields: Map<String, FieldDescriptor>): FieldDescriptor? =
         getAlternativeNames(name).firstNotNullOfOrNull { protoFields[it] }
 

@@ -11,6 +11,8 @@ kx_io = "0.8.2"
 logger = "7.0.14"
 # https://github.com/streem/pbandk/releases
 pbandk="0.16.0"
+# https://github.com/Kotlin/kotlinx-kover/releases
+kover = "0.9.8"
 
 ## testing libs
 # https://github.com/junit-team/junit5/releases
@@ -48,3 +50,4 @@ kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref 
 kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }

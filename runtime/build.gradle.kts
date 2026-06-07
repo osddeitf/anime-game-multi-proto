@@ -1,6 +1,7 @@
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
+    alias(libs.plugins.kover) // test coverage (JVM run; covers the shared commonMain engine)
     // npm publishing disabled for now: broken locally on Windows (Kotlin/npm-publish #187), registry
     // configured later. The ESM package + .d.mts come from the Kotlin/JS plugin (jsNodeProductionLibrary
     // Distribution), so this is only needed to run publishJsPackageToDefaultRegistry from CI. Re-enable then.
@@ -40,6 +41,14 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
             }
         }
+        commonTest {
+            dependencies {
+                implementation(kotlin("test"))
+                // real gi models + ProtoModelRegistry.getModels()/getEnums(); test scope only, so gi
+                // does NOT re-enter the published runtime artifact.
+                implementation(project(":gi"))
+            }
+        }
         jsMain {
             dependencies {
                 implementation(npm("protobufjs", "8.6.0"))
@@ -51,6 +60,28 @@ kotlin {
                 implementation("io.github.oshai:kotlin-logging-jvm:7.0.6")
                 implementation("com.google.protobuf:protobuf-java:4.31.1")
                 implementation("io.netty:netty-buffer:4.2.9.Final")
+            }
+        }
+    }
+}
+
+// Tests read the fixtures under <repoRoot>/config/test/ via relative paths; pin the JVM test working
+// dir to the repo root so they resolve the same way the app reads config/<version>/ at runtime.
+tasks.withType<org.gradle.api.tasks.testing.Test> {
+    workingDir = rootProject.projectDir
+}
+
+// Coverage of the shared engine. `./gradlew :runtime:koverHtmlReport` (runs jvmTest first) ->
+// runtime/build/reports/kover/html/index.html; `:runtime:koverLog` prints a summary line.
+kover {
+    reports {
+        filters {
+            excludes {
+                classes(
+                    "*.runtime.descriptor.*", // ProtoRuntimeImpl + KLoggerEngineLogger (JVM wiring, not under test)
+                    "*.NettyProto*",           // JVM buffer (NettyProtoWriter/Reader/Factory); tests use the common ByteArrayProtoBuffer
+                    "*.common.HelpersKt",      // JVM-only helpers (CSV stream, etc.)
+                )
             }
         }
     }
