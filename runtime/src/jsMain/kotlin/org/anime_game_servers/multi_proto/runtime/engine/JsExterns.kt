@@ -11,7 +11,7 @@ external object fs {
 }
 
 // protobuf.js descriptor extension: decodes a binary FileDescriptorSet (.desc).
-@JsModule("protobufjs/ext/descriptor")
+@JsModule("protobufjs/ext/descriptor.js")
 external object protobufDescriptor {
     val FileDescriptorSet: FileDescriptorSetType
 }

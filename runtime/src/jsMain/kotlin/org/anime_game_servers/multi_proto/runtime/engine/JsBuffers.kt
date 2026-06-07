@@ -5,7 +5,9 @@ import org.khronos.webgl.Uint8Array
 
 // protobuf.js Writer: a chunked, lazy-length writer. fork()/ldelim() emit length-delimited regions
 // without allocating+concatenating a temp buffer per sub-message — the fast path for encode.
-@JsModule("protobufjs/minimal")
+// .js is required: protobufjs is a CommonJS package with no `exports` map, so Node's ESM loader won't
+// resolve the bare subpath (bundlers do). Needed to run under Node ESM (incl. jsNodeTest).
+@JsModule("protobufjs/minimal.js")
 external object protobuf {
     object util {
         val Long: ProtoLongCtor?

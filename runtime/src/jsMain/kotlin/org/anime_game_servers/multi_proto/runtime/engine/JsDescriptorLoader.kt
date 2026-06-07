@@ -52,7 +52,11 @@ private fun convertField(f: dynamic): FieldDescriptor {
 }
 
 fun loadDescriptorJs(buffer: Uint8Array): ProtobufDescriptor {
-    val set = protobufDescriptor.FileDescriptorSet.decode(buffer)
+    // descriptor.js does `module.exports = <namespace>`; under Node's native ESM the CJS exports land on
+    // `.default` (bundlers flatten it onto the namespace). Accept either so it works in both environments.
+    val mod = protobufDescriptor.asDynamic()
+    val fileDescriptorSet = (mod.FileDescriptorSet ?: mod.default.FileDescriptorSet).unsafeCast<FileDescriptorSetType>()
+    val set = fileDescriptorSet.decode(buffer)
     val enums = mutableMapOf<String, EnumDescriptor>()
     val messages = mutableMapOf<String, MessageDescriptor>()
 
