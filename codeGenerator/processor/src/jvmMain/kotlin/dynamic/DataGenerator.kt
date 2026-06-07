@@ -45,13 +45,18 @@ open class DataGenerator(
         classInfo.oneOfs.values.forEach { oneOfData ->
             logger.info("OneOf: $oneOfData")
 
-            file.id(4) += "sealed class ${oneOfData.wrapperName}<T>(val value: T) {\n"
-            file.id(8) += "class ${oneOfData.unknownName}() : ${oneOfData.wrapperName}<UnknownModel>(UnknownModel())\n"
-            file.id(8) += "class UnknownModel\n"
+            // Emit the cases as data classes so oneof values compare structurally; plain classes fall back to
+            // identity equality, which breaks equals()/assertEquals on any model containing a oneof. `value` is
+            // an abstract property each case overrides; UnknownModel is an object so the (vestigial, never
+            // instantiated) unknown case is still a legal data class with a single defaulted parameter.
+            file.id(4) += "sealed class ${oneOfData.wrapperName}<T> {\n"
+            file.id(8) += "abstract val value: T\n"
+            file.id(8) += "object UnknownModel\n"
+            file.id(8) += "data class ${oneOfData.unknownName}(override val value: UnknownModel = UnknownModel) : ${oneOfData.wrapperName}<UnknownModel>()\n"
             oneOfData.oneOfClassMap.forEach inner@{ (name, oneOfClass) ->
                 val model = classInfoCache[oneOfClass.kSType] ?: return@inner
                 val className = name.getClassName()
-                file.id(8) += "class ${className}(value:${model.packageName}.${model.name}) : ${oneOfData.wrapperName}<${model.packageName}.${model.name}>(value)\n"
+                file.id(8) += "data class ${className}(override val value:${model.packageName}.${model.name}) : ${oneOfData.wrapperName}<${model.packageName}.${model.name}>()\n"
             }
             file.id(4) += "}\n"
         }
