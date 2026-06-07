@@ -10,6 +10,12 @@ import org.anime_game_servers.multi_proto.core.interfaces.ProtoVersionRuntime
 import org.anime_game_servers.multi_proto.core.registry.EnumRegistration
 import org.anime_game_servers.multi_proto.core.registry.ModelRegistration
 import org.anime_game_servers.multi_proto.runtime.common.packetMapperFromCsv
+import org.anime_game_servers.multi_proto.runtime.common.ConfigPaths
+import org.anime_game_servers.multi_proto.runtime.common.descriptorPattern
+import org.anime_game_servers.multi_proto.runtime.common.encryptionPattern
+import org.anime_game_servers.multi_proto.runtime.common.mappingPattern
+import org.anime_game_servers.multi_proto.runtime.common.packetsPattern
+import org.anime_game_servers.multi_proto.runtime.common.resolveConfigPath
 import kotlin.js.JsExport
 import kotlin.reflect.KClass
 
@@ -19,11 +25,15 @@ import kotlin.reflect.KClass
  * wired via `ProtoModelRegistry.use(JsProtoRuntime(getModels(), getEnums()))`. Single-threaded.
  *
  * Logging is off by default; call [setLogger] (e.g. with [ConsoleEngineLogger]) to opt in.
+ *
+ * Input file locations come from [configPaths] (per-file "{version}" patterns; see [ConfigPaths]).
+ * Null, or any omitted field, uses the conventional config/<version>/ default.
  */
 @JsExport
 class JsProtoRuntime(
     models: Collection<ModelRegistration>,
     enums: Collection<EnumRegistration>,
+    private val configPaths: ConfigPaths? = null,
 ) : ProtoRuntime {
 
     private var logger: EngineLogger? = null
@@ -61,13 +71,13 @@ class JsProtoRuntime(
 
     private fun acquireCache(version: String): ProtoDescriptorRuntime {
         return caches.getOrPut(version) {
-            val descriptor = loadDescriptorJs(fs.readFileSync("config/$version/proto.desc"))
+            val descriptor = loadDescriptorJs(fs.readFileSync(resolveConfigPath(configPaths.descriptorPattern, version)))
             val instance = ProtoDescriptorRuntime(version, descriptor, JsProtoBufferFactory, modelMap, enumMap)
             instance.logger = logger
-            if (fs.existsSync("config/$version/mapping.json"))
-                instance.loadMapping(fs.readFileSync("config/$version/mapping.json", "utf8"))
-            if (fs.existsSync("config/$version/encryption.json"))
-                instance.loadEncryption(fs.readFileSync("config/$version/encryption.json", "utf8"))
+            val mapping = resolveConfigPath(configPaths.mappingPattern, version)
+            if (fs.existsSync(mapping)) instance.loadMapping(fs.readFileSync(mapping, "utf8"))
+            val encryption = resolveConfigPath(configPaths.encryptionPattern, version)
+            if (fs.existsSync(encryption)) instance.loadEncryption(fs.readFileSync(encryption, "utf8"))
             instance
         }
     }
@@ -84,7 +94,7 @@ class JsProtoRuntime(
     override fun getPacketMapper(version: Version): PacketIdProvider? {
         return try {
             packetMappers.getOrPut(version.namespace) {
-                packetMapperFromCsv(fs.readFileSync("config/${version.namespace}/packets.csv", "utf8"))
+                packetMapperFromCsv(fs.readFileSync(resolveConfigPath(configPaths.packetsPattern, version.namespace), "utf8"))
             }
         } catch (ex: Throwable) {
             logger?.error(ex) { "(descriptor-js) getPacketMapper failed for $version" }

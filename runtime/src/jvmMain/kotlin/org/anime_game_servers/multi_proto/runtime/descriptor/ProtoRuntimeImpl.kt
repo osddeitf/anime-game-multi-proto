@@ -8,6 +8,12 @@ import org.anime_game_servers.multi_proto.core.interfaces.ProtoVersionRuntime
 import org.anime_game_servers.multi_proto.core.registry.EnumRegistration
 import org.anime_game_servers.multi_proto.core.registry.ModelRegistration
 import org.anime_game_servers.multi_proto.runtime.common.packetMapperFromCSVStream
+import org.anime_game_servers.multi_proto.runtime.common.ConfigPaths
+import org.anime_game_servers.multi_proto.runtime.common.descriptorPattern
+import org.anime_game_servers.multi_proto.runtime.common.encryptionPattern
+import org.anime_game_servers.multi_proto.runtime.common.mappingPattern
+import org.anime_game_servers.multi_proto.runtime.common.packetsPattern
+import org.anime_game_servers.multi_proto.runtime.common.resolveConfigPath
 import org.anime_game_servers.multi_proto.runtime.engine.EngineLogger
 import org.anime_game_servers.multi_proto.runtime.engine.NettyProtoBufferFactory
 import org.anime_game_servers.multi_proto.runtime.engine.ProtoDescriptorRuntime
@@ -22,10 +28,14 @@ import kotlin.reflect.KClass
  * (name -> registration) and resolves models on demand against the per-version descriptor.
  *
  * Logging is off by default; call [setLogger] (e.g. with [KLoggerEngineLogger]) to opt in.
+ *
+ * Input file locations come from [configPaths] (per-file "{version}" patterns; see [ConfigPaths]).
+ * Null, or any omitted field, uses the conventional config/<version>/ default.
  */
 class ProtoRuntimeImpl(
     models: Collection<ModelRegistration>,
     enums: Collection<EnumRegistration>,
+    private val configPaths: ConfigPaths? = null,
 ) : ProtoRuntime {
 
     private var logger: EngineLogger? = null
@@ -63,11 +73,11 @@ class ProtoRuntimeImpl(
 
     private fun acquireCache(version: String): ProtoDescriptorRuntime {
         return caches.computeIfAbsent(version) {
-            val descriptor = loadDescriptor("config/$version/proto.desc")
+            val descriptor = loadDescriptor(resolveConfigPath(configPaths.descriptorPattern, version))
             val instance = ProtoDescriptorRuntime(version, descriptor, NettyProtoBufferFactory, modelMap, enumMap)
             instance.logger = logger
-            File("config/$version/mapping.json").takeIf { it.exists() }?.let { instance.loadMapping(it.readText()) }
-            File("config/$version/encryption.json").takeIf { it.exists() }?.let { instance.loadEncryption(it.readText()) }
+            File(resolveConfigPath(configPaths.mappingPattern, version)).takeIf { it.exists() }?.let { instance.loadMapping(it.readText()) }
+            File(resolveConfigPath(configPaths.encryptionPattern, version)).takeIf { it.exists() }?.let { instance.loadEncryption(it.readText()) }
             instance
         }
     }
@@ -84,7 +94,7 @@ class ProtoRuntimeImpl(
     override fun getPacketMapper(version: Version): PacketIdProvider? {
         return try {
             packetMappers.computeIfAbsent(version) {
-                val resource = "config/${version.namespace}/packets.csv"
+                val resource = resolveConfigPath(configPaths.packetsPattern, version.namespace)
                 logger?.info { "Loading $resource" }
                 packetMapperFromCSVStream(File(resource).inputStream())
             }
