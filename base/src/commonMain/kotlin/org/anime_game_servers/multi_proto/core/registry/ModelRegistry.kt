@@ -28,6 +28,10 @@ class OneOfCase(
     val wrappedTypeName: String,
     /** Wrap an inner value into the case subclass instance. */
     val wrap: (Any?) -> Any,
+    /** [Version] name this case was added in (e.g. "GI_5_3_0"), or null if unconstrained. */
+    val addedIn: String? = null,
+    /** [Version] name this case was removed in (exclusive), or null if never removed. */
+    val removedIn: String? = null,
 )
 
 class OneOf(
@@ -56,22 +60,41 @@ class Property(
     /** Referenced model/enum simple name for a MAP key. */
     val keyModelTypeName: String? = null,
     val oneOf: OneOf? = null,
+    /** [Version] name this field was added in (e.g. "GI_5_3_0"), or null if unconstrained. */
+    val addedIn: String? = null,
+    /** [Version] name this field was removed in (exclusive), or null if never removed. */
+    val removedIn: String? = null,
 )
 
 interface ModelRegistration {
     val simpleName: String
     val properties: List<Property>
+    /** [Version] name this model was added in (e.g. "GI_5_3_0"), or null if unconstrained. */
+    val addedIn: String? get() = null
+    /** [Version] name this model was removed in (exclusive), or null if never removed. */
+    val removedIn: String? get() = null
     /** Build a model instance from values in constructor order; a null slot keeps the property default. */
     fun create(values: Array<Any?>): Any
     /** Read property values from a model instance, in constructor order. */
     fun read(model: Any): Array<Any?>
 }
 
-class EnumEntry(val name: String, val value: Any, val isUnrecognised: Boolean)
+/** [addedIn]/[removedIn] carry the entry's `@AddedIn`/`@RemovedIn` [Version] name, or null if unconstrained. */
+class EnumEntry(
+    val name: String,
+    val value: Any,
+    val isUnrecognised: Boolean,
+    val addedIn: String? = null,
+    val removedIn: String? = null,
+)
 
 interface EnumRegistration {
     val simpleName: String
     /** Enum entries in declaration order, including UNRECOGNISED. */
     val entries: List<EnumEntry>
     val unrecognised: Any
+    /** [Version] name this enum was added in (e.g. "GI_5_3_0"), or null if unconstrained. */
+    val addedIn: String? get() = null
+    /** [Version] name this enum was removed in (exclusive), or null if never removed. */
+    val removedIn: String? get() = null
 }

@@ -44,7 +44,7 @@ class JsPlainObjectTest {
         if (!fixturesPresent()) return
         val models = modelRegistrationsFromJs(registry).associateBy { it.simpleName }
         val enums = enumRegistrationsFromJs(registry).associateBy { it.simpleName }
-        val rt = ProtoDescriptorRuntime("test", loadTestDescriptor("plain.desc"), ByteArrayProtoBufferFactory, models, enums)
+        val rt = ProtoDescriptorRuntime(null, loadTestDescriptor("plain.desc"), ByteArrayProtoBufferFactory, models, enums)
 
         val original: Any = js("({ retCode: 0, enterSceneToken: 1111 })")
         val bytes = rt.encodeToByteArray("EnterSceneReadyRsp", original)

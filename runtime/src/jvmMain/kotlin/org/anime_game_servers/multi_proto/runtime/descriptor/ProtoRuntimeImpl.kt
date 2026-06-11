@@ -54,7 +54,7 @@ class ProtoRuntimeImpl(
 
     override fun <T : Any> encodeToByteArray(version: Version, modelClass: KClass<out T>, model: T): ByteArray? {
         return try {
-            acquireCache(version.namespace).encodeToByteArray(modelClass.simpleName!!, model)
+            acquireCache(version).encodeToByteArray(modelClass.simpleName!!, model)
         } catch (ex: Exception) {
             logger?.error(ex) { "(descriptor) ${version.namespace} - encodeToByteArray failed for ${modelClass.simpleName}" }
             null
@@ -64,27 +64,32 @@ class ProtoRuntimeImpl(
     @Suppress("UNCHECKED_CAST")
     override fun <T : Any> decodeFromByteArray(version: Version, modelClass: KClass<out T>, byteArray: ByteArray): T? {
         return try {
-            acquireCache(version.namespace).decodeFromByteArray(modelClass.simpleName!!, byteArray) as T?
+            acquireCache(version).decodeFromByteArray(modelClass.simpleName!!, byteArray) as T?
         } catch (ex: Exception) {
             logger?.error(ex) { "(descriptor) ${version.namespace} - decodeFromByteArray failed for ${modelClass.simpleName}" }
             null
         }
     }
 
-    private fun acquireCache(version: String): ProtoDescriptorRuntime {
-        return caches.computeIfAbsent(version) {
-            val descriptor = loadDescriptor(resolveConfigPath(configPaths.descriptorPattern, version))
+    // Keyed by the exact version (name), not namespace: versions can share a descriptor namespace (e.g. V3_2)
+    // yet differ in which fields exist, so each needs its own version-filtered runtime. Config files are still
+    // resolved by namespace (the shared descriptor), and version.id drives @AddedIn/@RemovedIn filtering.
+    private fun acquireCache(version: Version): ProtoDescriptorRuntime {
+        return caches.computeIfAbsent(version.name) {
+            val ns = version.namespace
+            logger?.debug { "(descriptor) version-aware: ${version.name} (id=${version.id}, namespace=$ns)" }
+            val descriptor = loadDescriptor(resolveConfigPath(configPaths.descriptorPattern, ns))
             val instance = ProtoDescriptorRuntime(version, descriptor, NettyProtoBufferFactory, modelMap, enumMap)
             instance.logger = logger
-            File(resolveConfigPath(configPaths.mappingPattern, version)).takeIf { it.exists() }?.let { instance.loadMapping(it.readText()) }
-            File(resolveConfigPath(configPaths.encryptionPattern, version)).takeIf { it.exists() }?.let { instance.loadEncryption(it.readText()) }
+            File(resolveConfigPath(configPaths.mappingPattern, ns)).takeIf { it.exists() }?.let { instance.loadMapping(it.readText()) }
+            File(resolveConfigPath(configPaths.encryptionPattern, ns)).takeIf { it.exists() }?.let { instance.loadEncryption(it.readText()) }
             instance
         }
     }
 
     override fun getVersionRuntime(version: Version): ProtoVersionRuntime? {
         return try {
-            acquireCache(version.namespace)
+            acquireCache(version)
         } catch (ex: Exception) {
             logger?.error(ex) { "(descriptor) failed to get version $version runtime" }
             null
@@ -107,6 +112,7 @@ class ProtoRuntimeImpl(
 
 /** Ready-made [EngineLogger] backed by kotlin-logging; pass to [ProtoRuntimeImpl.setLogger]. */
 class KLoggerEngineLogger(private val log: KLogger) : EngineLogger {
+    override fun debug(message: () -> String) = log.debug(message)
     override fun info(message: () -> String) = log.info(message)
     override fun warn(message: () -> String) = log.warn(message)
     override fun error(throwable: Throwable?, message: () -> String) = log.error(throwable, message)

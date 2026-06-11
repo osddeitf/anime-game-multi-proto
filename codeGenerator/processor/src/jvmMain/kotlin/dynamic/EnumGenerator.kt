@@ -4,6 +4,7 @@ import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
+import common.versionFromAnnotation
 import java.io.OutputStream
 
 class EnumGenerator(
@@ -57,10 +58,14 @@ class EnumGenerator(
         val identity = classInfo.definition.getParentType()?.takeIf { it.isNotBlank() }?.let { "$it.$name" } ?: name
         file += "\nobject ${name}_Registration : $REGISTRY_PACKAGE.EnumRegistration {\n"
         file.id(4) += "override val simpleName = \"$identity\"\n"
+        classInfo.definition.versionFromAnnotation("AddedIn")?.let { file.id(4) += "override val addedIn = \"$it\"\n" }
+        classInfo.definition.versionFromAnnotation("RemovedIn")?.let { file.id(4) += "override val removedIn = \"$it\"\n" }
         file.id(4) += "override val entries = listOf<$REGISTRY_PACKAGE.EnumEntry>(\n"
         classInfo.declarations.forEach {
             val en = it.simpleName.asString()
-            file.id(8) += "$REGISTRY_PACKAGE.EnumEntry(\"$en\", $name.$en, false),\n"
+            val version = (it.versionFromAnnotation("AddedIn")?.let { v -> ", addedIn = \"$v\"" } ?: "") +
+                (it.versionFromAnnotation("RemovedIn")?.let { v -> ", removedIn = \"$v\"" } ?: "")
+            file.id(8) += "$REGISTRY_PACKAGE.EnumEntry(\"$en\", $name.$en, false$version),\n"
         }
         file.id(8) += "$REGISTRY_PACKAGE.EnumEntry(\"$UNRECOGNISED_ENUM_NAME\", $name.$UNRECOGNISED_ENUM_NAME, true),\n"
         file.id(4) += ")\n"

@@ -53,7 +53,7 @@ class JsProtoRuntime(
 
     override fun <T : Any> encodeToByteArray(version: Version, modelClass: KClass<out T>, model: T): ByteArray? {
         return try {
-            acquireCache(version.namespace).encodeToByteArray(modelClass.simpleName!!, model)
+            acquireCache(version).encodeToByteArray(modelClass.simpleName!!, model)
         } catch (ex: Throwable) {
             logger?.error(ex) { "(descriptor-js) encodeToByteArray failed for ${modelClass.simpleName}" }
             null
@@ -63,7 +63,7 @@ class JsProtoRuntime(
     @Suppress("UNCHECKED_CAST")
     override fun <T : Any> decodeFromByteArray(version: Version, modelClass: KClass<out T>, byteArray: ByteArray): T? {
         return try {
-            acquireCache(version.namespace).decodeFromByteArray(modelClass.simpleName!!, byteArray) as T?
+            acquireCache(version).decodeFromByteArray(modelClass.simpleName!!, byteArray) as T?
         } catch (ex: Throwable) {
             logger?.error(ex) { "(descriptor-js) decodeFromByteArray failed for ${modelClass.simpleName}" }
             null
@@ -71,8 +71,10 @@ class JsProtoRuntime(
     }
 
     /**
-     * Plain-object API: decode wire [bytes] for model [simpleName] (under version namespace [version]) into a
-     * PLAIN JS OBJECT — used with the plain-data registry (no Kotlin model class). [bytes] is a Uint8Array.
+     * Plain-object API: decode wire [bytes] for model [simpleName] into a PLAIN JS OBJECT — used with the
+     * plain-data registry (no Kotlin model class). [version] is the canonical [Version] name (e.g. "GI_6_5_0"):
+     * its namespace drives config-file paths and its id drives @AddedIn/@RemovedIn filtering. [bytes] is a
+     * Uint8Array.
      */
     fun decodeModel(version: String, simpleName: String, bytes: Uint8Array): Any? {
         return try {
@@ -83,7 +85,7 @@ class JsProtoRuntime(
         }
     }
 
-    /** Plain-object API: encode a PLAIN JS OBJECT [model] for [simpleName] to a Uint8Array. */
+    /** Plain-object API: encode a PLAIN JS OBJECT [model] for [simpleName] to a Uint8Array. See [decodeModel]. */
     fun encodeModel(version: String, simpleName: String, model: Any): Uint8Array? {
         return try {
             byteArrayToUint8(acquireCache(version).encodeToByteArray(simpleName, model))
@@ -93,14 +95,31 @@ class JsProtoRuntime(
         }
     }
 
+    /** Typed path: we have the [Version], so resolve files by namespace and filter by id, keyed by exact name. */
+    private fun acquireCache(version: Version): ProtoDescriptorRuntime =
+        buildOrGet(version.name, version.namespace, version)
+
+    /**
+     * Plain-object path: [version] is a string. If it's a canonical [Version] name we resolve its namespace
+     * (config paths) and use it for filtering; otherwise (e.g. a test fixture name) the raw string is used as
+     * the path token with filtering disabled — preserving the legacy behavior.
+     */
     private fun acquireCache(version: String): ProtoDescriptorRuntime {
-        return caches.getOrPut(version) {
-            val descriptor = loadDescriptorJs(fs.readFileSync(resolveConfigPath(configPaths.descriptorPattern, version)))
+        val known = Version.entries.firstOrNull { it.name == version }
+        return if (known != null) buildOrGet(known.name, known.namespace, known)
+        else buildOrGet(version, version, null)
+    }
+
+    private fun buildOrGet(cacheKey: String, pathToken: String, version: Version?): ProtoDescriptorRuntime {
+        return caches.getOrPut(cacheKey) {
+            if (version != null) logger?.debug { "(descriptor-js) version-aware: identified ${version.name} (id=${version.id}, namespace=${version.namespace})" }
+            else logger?.debug { "(descriptor-js) '$cacheKey' is not a known Version — version filtering disabled" }
+            val descriptor = loadDescriptorJs(fs.readFileSync(resolveConfigPath(configPaths.descriptorPattern, pathToken)))
             val instance = ProtoDescriptorRuntime(version, descriptor, JsProtoBufferFactory, modelMap, enumMap)
             instance.logger = logger
-            val mapping = resolveConfigPath(configPaths.mappingPattern, version)
+            val mapping = resolveConfigPath(configPaths.mappingPattern, pathToken)
             if (fs.existsSync(mapping)) instance.loadMapping(fs.readFileSync(mapping, "utf8"))
-            val encryption = resolveConfigPath(configPaths.encryptionPattern, version)
+            val encryption = resolveConfigPath(configPaths.encryptionPattern, pathToken)
             if (fs.existsSync(encryption)) instance.loadEncryption(fs.readFileSync(encryption, "utf8"))
             instance
         }
@@ -108,7 +127,7 @@ class JsProtoRuntime(
 
     override fun getVersionRuntime(version: Version): ProtoVersionRuntime? {
         return try {
-            acquireCache(version.namespace)
+            acquireCache(version)
         } catch (ex: Throwable) {
             logger?.error(ex) { "(descriptor-js) failed to get version $version runtime" }
             null
@@ -130,6 +149,7 @@ class JsProtoRuntime(
 /** Ready-made [EngineLogger] that writes to the JS console; pass to [JsProtoRuntime.setLogger]. */
 @JsExport
 object ConsoleEngineLogger : EngineLogger {
+    override fun debug(message: () -> String) { console.log(message()) }
     override fun info(message: () -> String) { console.info(message()) }
     override fun warn(message: () -> String) { console.warn(message()) }
     override fun error(throwable: Throwable?, message: () -> String) { console.error(message(), throwable) }

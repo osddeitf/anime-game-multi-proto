@@ -2,6 +2,7 @@ package org.anime_game_servers.multi_proto.runtime.test
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.anime_game_servers.core.base.Version
 import org.anime_game_servers.multi_proto.gi.ProtoModelRegistry
 import org.anime_game_servers.multi_proto.runtime.common.ProtoMappingConfig
 import org.anime_game_servers.multi_proto.runtime.common.fixTypo
@@ -54,12 +55,17 @@ fun subEncryption(vararg names: String): EncryptionConfig {
     return fullEncryption.filterKeys { it in keep }
 }
 
-/** Construct a fresh engine for one case. Sub-config is serialized back through the production loaders. */
+/**
+ * Construct a fresh engine for one case. Sub-config is serialized back through the production loaders.
+ * [version] is the (optional) version driving @AddedIn/@RemovedIn field/enum skipping; null (the default)
+ * disables version filtering, matching the legacy behavior.
+ */
 fun buildRuntime(
     desc: ProtobufDescriptor,
     mapping: ProtoMappingConfig? = null,
     encryption: EncryptionConfig? = null,
-): ProtoDescriptorRuntime = ProtoDescriptorRuntime("test", desc, ByteArrayProtoBufferFactory, models, enums).apply {
+    version: Version? = null,
+): ProtoDescriptorRuntime = ProtoDescriptorRuntime(version, desc, ByteArrayProtoBufferFactory, models, enums).apply {
     mapping?.let { loadMapping(Json.encodeToString(it)) }
     encryption?.let { loadEncryption(Json.encodeToString(it)) }
 }

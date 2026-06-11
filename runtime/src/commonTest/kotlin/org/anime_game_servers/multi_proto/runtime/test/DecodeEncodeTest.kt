@@ -13,9 +13,12 @@ import org.anime_game_servers.multi_proto.gi.messages.scene.entity.MotionInfo
 import org.anime_game_servers.multi_proto.gi.messages.scene.entity.ProtEntityType
 import org.anime_game_servers.multi_proto.gi.messages.scene.entity.SceneAvatarInfo
 import org.anime_game_servers.multi_proto.gi.messages.scene.entity.SceneEntityInfo
+import org.anime_game_servers.core.base.Version
 import org.anime_game_servers.multi_proto.runtime.common.ProtoMappingConfig
+import org.anime_game_servers.multi_proto.runtime.engine.EngineLogger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -166,5 +169,80 @@ class DecodeEncodeTest {
         // Inverse direction: a model left at its defaults encodes to ZERO bytes — proto3 omits default-valued
         // scalars/enums on the wire, which is exactly why decode must re-materialize them as defaults above.
         assertEquals(0, rt.encodeToByteArray("SceneEntityInfo", SceneEntityInfo()).size)
+    }
+
+    /** Collects engine debug/warn lines so a test can assert which fields/enums were skipped or missed. */
+    private class CapturingLogger : EngineLogger {
+        val debugs = mutableListOf<String>()
+        val warnings = mutableListOf<String>()
+        override fun debug(message: () -> String) { debugs += message() }
+        override fun warn(message: () -> String) { warnings += message() }
+    }
+
+    /**
+     * Version-aware resolution (@RemovedIn, field level). The version-agnostic registry carries fields that
+     * exist only in older versions; the modern plain.desc has none of them. Without a version the engine logs
+     * a "no proto field" warning for each (noise); told it's decoding a modern version, it skips them silently.
+     */
+    @Test
+    fun versionAware_skipsRemovedFields_silencesWarnings() {
+        if (!fixturesPresent()) return
+        // SceneEntityInfo references ProtEntityType; map its zero-value so the enum binds (see proto3 test).
+        val mapping = ProtoMappingConfig(
+            enums = mapOf("ProtEntityType" to mapOf("PROT_ENTITY_NONE" to "PROT_ENTITY_TYPE_NONE")),
+        )
+        // questInfo was @RemovedIn GI_0_9_0; propMap/fightPropMap @RemovedIn GI_1_0_0 — gone from any modern desc.
+        val removed = listOf("SceneEntityInfo.questInfo", "SceneEntityInfo.propMap", "SceneEntityInfo.fightPropMap")
+
+        // Baseline (no version → legacy behavior): the removed-field warnings fire, proving they're genuinely
+        // absent from plain.desc and that filtering is what suppresses them (not a coincidental match).
+        val unaware = CapturingLogger()
+        buildRuntime(plainDesc, mapping = mapping).also { it.logger = unaware }
+            .decodeFromByteArray("SceneEntityInfo", byteArrayOf())
+        removed.forEach { f -> assertTrue(unaware.warnings.any { it.contains(f) }, "expected baseline warning for $f") }
+
+        // Version-aware (GI_6_5_0): those fields fall outside their @RemovedIn range → skipped, no warning.
+        val aware = CapturingLogger()
+        val rt = buildRuntime(plainDesc, mapping = mapping, version = Version.GI_6_5_0).also { it.logger = aware }
+        val info = rt.decodeFromByteArray("SceneEntityInfo", byteArrayOf()) as SceneEntityInfo
+        removed.forEach { f -> assertFalse(aware.warnings.any { it.contains(f) }, "did not expect warning for $f") }
+        // ...and instead each skip is traced at debug level so a consumer can see why a field was dropped.
+        removed.forEach { f -> assertTrue(aware.debugs.any { it.contains("skip field $f") }, "expected debug skip for $f") }
+
+        // Decode integrity is preserved: kept fields still materialize their proto3 defaults, and the skipped
+        // (removed) fields simply stay at their model defaults (null message / empty map).
+        assertEquals(0, info.entityId)
+        assertEquals(ProtEntityType.PROT_ENTITY_NONE, info.entityType)
+        assertNull(info.motionInfo)
+        assertNull(info.questInfo)
+        assertTrue(info.propMap.isEmpty())
+    }
+
+    /**
+     * Version-aware resolution (@AddedIn, behavioral). SceneAvatarInfo.skillLevelMap was @AddedIn GI_CB2, so it
+     * exists in the descriptor but NOT in versions before it. Filtering at GI_CB1 must skip the field for both
+     * encode and decode (it round-trips away); including its version (GI_6_5_0) round-trips it intact.
+     */
+    @Test
+    fun versionAware_skipsFieldAddedLater_roundTrip() {
+        if (!fixturesPresent()) return
+        val mapping = subMapping("SceneAvatarInfo", "avatar_id", "guid", "skill_level_map")
+        val original = SceneAvatarInfo(
+            avatarId = 10000123,
+            guid = 3668614330982730847,
+            skillLevelMap = mapOf(11235 to 5, 11231 to 2),
+        )
+
+        // Included (GI_6_5_0 >= GI_CB2): skillLevelMap is kept → preserved through the round-trip.
+        val included = buildRuntime(obfDesc, mapping = mapping, version = Version.GI_6_5_0)
+        assertEquals(original.skillLevelMap, included.roundTrip(original).skillLevelMap)
+
+        // Excluded (GI_CB1 < GI_CB2): the field is skipped on both encode and decode → comes back empty, while
+        // the unannotated fields (avatarId, guid) still round-trip normally.
+        val excluded = buildRuntime(obfDesc, mapping = mapping, version = Version.GI_CB1)
+        val back = excluded.roundTrip(original)
+        assertTrue(back.skillLevelMap.isEmpty())
+        assertEquals(original.avatarId, back.avatarId)
+        assertEquals(original.guid, back.guid)
     }
 }

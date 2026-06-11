@@ -1,6 +1,7 @@
 package org.anime_game_servers.multi_proto.runtime.engine
 
 import kotlinx.serialization.json.Json
+import org.anime_game_servers.core.base.Version
 import org.anime_game_servers.multi_proto.core.registry.EnumRegistration
 import org.anime_game_servers.multi_proto.core.registry.ModelRegistration
 import org.anime_game_servers.multi_proto.core.registry.OneOf
@@ -17,6 +18,8 @@ import org.anime_game_servers.multi_proto.runtime.encryption.EncryptionOperation
 
 /** Minimal logging hook so the engine stays in commonMain; the platform may wire a real logger. */
 interface EngineLogger {
+    /** Fine-grained tracing (e.g. the identified version and each entry skipped by version range). */
+    fun debug(message: () -> String) {}
     fun info(message: () -> String) {}
     fun warn(message: () -> String) {}
     fun error(throwable: Throwable?, message: () -> String) {}
@@ -28,7 +31,13 @@ interface EngineLogger {
  * through [buffers]. Ported from the original JVM/Netty/reflection implementation.
  */
 class ProtoDescriptorRuntime(
-    val version: String,
+    /**
+     * The version being decoded/encoded. Its [Version.id] skips registry fields/enums/oneof-cases/types whose
+     * @AddedIn/@RemovedIn range excludes it (so absent-in-version entries don't log spurious "no proto field" /
+     * "missing enum" warnings). Null disables filtering — used for the legacy path and for an unrecognized
+     * version string in the JS plain-object runtime.
+     */
+    val version: Version?,
     val protoDescriptor: ProtobufDescriptor,
     private val buffers: ProtoBufferFactory,
     // KSP-generated model/enum metadata, keyed by simpleName (the runtime impl's register).
@@ -37,6 +46,31 @@ class ProtoDescriptorRuntime(
 ) : ProtoVersionRuntime {
 
     var logger: EngineLogger? = null
+
+    /**
+     * Whether a registry entry annotated [addedIn]/[removedIn] (Version names, e.g. "GI_5_3_0") exists in the
+     * current [version]. `removedIn` is exclusive (a field removed in GI_5_4 is still present in GI_5_3). When
+     * [version] is null, or an annotation name doesn't resolve to a known [Version], the entry is kept.
+     */
+    private fun presentInVersion(addedIn: String?, removedIn: String?): Boolean {
+        val vid = version?.id ?: return true
+        val added = addedIn?.let { versionIdByName[it] }
+        val removed = removedIn?.let { versionIdByName[it] }
+        return (added == null || vid >= added) && (removed == null || vid < removed)
+    }
+
+    /** Trace (at debug) a registry entry skipped because [version] is outside its version range. */
+    private fun traceSkipped(kind: String, name: String, addedIn: String?, removedIn: String?) {
+        logger?.debug {
+            val range = listOfNotNull(addedIn?.let { "added=$it" }, removedIn?.let { "removed=$it" }).joinToString(", ")
+            "[${version?.name}] skip $kind $name ($range)"
+        }
+    }
+
+    private companion object {
+        /** Version enum-constant name (e.g. "GI_5_3_0") -> its monotonic [Version.id], for range comparison. */
+        val versionIdByName: Map<String, Int> = Version.entries.associate { it.name to it.id }
+    }
 
     private var encryptionMap: Map<String, Map<String, List<EncryptionOperation>>>? = null
     private var mapping: ProtoMappingConfig? = null
@@ -239,11 +273,21 @@ class ProtoDescriptorRuntime(
         // The property's position in registration.properties IS its data index (create/read exchange values
         // in this order); the engine carries it internally as ModelPropertyInfo/OneOfPropInfo.dataIndex.
         registration.properties.forEachIndexed { dataIndex, property ->
+            // Skip fields whose @AddedIn/@RemovedIn range excludes the current version: they don't exist in
+            // this version's descriptor, so matching them would only log a spurious "no proto field" warning.
+            if (!presentInVersion(property.addedIn, property.removedIn)) {
+                traceSkipped("field", "$modelName.${property.name}", property.addedIn, property.removedIn)
+                return@forEachIndexed
+            }
             try {
                 if (property.kind == PropertyKind.ONEOF) {
                     val oneOf = property.oneOf ?: error("oneof property ${property.name} missing descriptor")
                     val casesByName = mutableMapOf<String, ModelPropertyInfo>()
                     for (case in oneOf.cases) {
+                        if (!presentInVersion(case.addedIn, case.removedIn)) {
+                            traceSkipped("oneof case", "$modelName.${case.caseName}", case.addedIn, case.removedIn)
+                            continue
+                        }
                         val fieldName = case.caseName.replaceFirstChar { it.lowercase() }
                         val protoField = matchField(fieldName, protoFields)
                             ?: matchField(case.caseName, protoFields)
@@ -287,6 +331,12 @@ class ProtoDescriptorRuntime(
         val backward = mutableMapOf<Int, Any>()
         for (entry in registration.entries) {
             if (entry.isUnrecognised) continue
+            // Skip entries absent in the current version (added later / removed earlier) — they're not in this
+            // version's proto enum, so a lookup would only emit a spurious "missing matching enum" warning.
+            if (!presentInVersion(entry.addedIn, entry.removedIn)) {
+                traceSkipped("enum entry", "$modelName.${entry.name}", entry.addedIn, entry.removedIn)
+                continue
+            }
             val otherName = alias[entry.name] ?: entry.name
             when (val other = protoEnums[otherName]) {
                 null -> {
@@ -317,23 +367,42 @@ class ProtoDescriptorRuntime(
             val enumReg = enums[name]
             if (enumReg != null) {
                 if (!enumCache.containsKey(name)) {
-                    enumCache[name] = try {
-                        val enumProto = lookupEnum(proto) ?: error("Proto enum $proto missing for $name")
-                        prepareEnum(name, enumReg, enumProto)
-                    } catch (ex: Exception) {
-                        logger?.error(ex) { "Resolve enum failed: $name" }
-                        null
+                    enumCache[name] = when {
+                        // Whole enum doesn't exist in this version (added later / removed earlier): leave it
+                        // unresolved silently rather than logging that the proto enum is missing.
+                        !presentInVersion(enumReg.addedIn, enumReg.removedIn) -> {
+                            traceSkipped("enum type", name, enumReg.addedIn, enumReg.removedIn)
+                            null
+                        }
+                        else -> try {
+                            val enumProto = lookupEnum(proto) ?: error("Proto enum $proto missing for $name")
+                            prepareEnum(name, enumReg, enumProto)
+                        } catch (ex: Exception) {
+                            logger?.error(ex) { "Resolve enum failed: $name" }
+                            null
+                        }
                     }
                 }
             } else {
                 if (!modelCache.containsKey(name)) {
-                    modelCache[name] = try {
-                        val reg = models[name] ?: error("No registration for model $name")
-                        val message = lookupMessage(proto) ?: error("Proto message $proto missing for $name")
-                        prepareModel(queue, refs, name, reg, message)
-                    } catch (ex: Exception) {
-                        logger?.error(ex) { "Resolve model failed: $name" }
-                        null
+                    val reg = models[name]
+                    modelCache[name] = when {
+                        reg == null -> {
+                            logger?.error(null) { "Resolve model failed: $name" }
+                            null
+                        }
+                        // Whole model doesn't exist in this version: leave it unresolved silently.
+                        !presentInVersion(reg.addedIn, reg.removedIn) -> {
+                            traceSkipped("model type", name, reg.addedIn, reg.removedIn)
+                            null
+                        }
+                        else -> try {
+                            val message = lookupMessage(proto) ?: error("Proto message $proto missing for $name")
+                            prepareModel(queue, refs, name, reg, message)
+                        } catch (ex: Exception) {
+                            logger?.error(ex) { "Resolve model failed: $name" }
+                            null
+                        }
                     }
                 }
             }

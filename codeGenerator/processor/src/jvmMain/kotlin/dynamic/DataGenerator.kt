@@ -2,6 +2,7 @@ package dynamic
 
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
+import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSType
 import common.versionFromAnnotation
 import org.anime_game_servers.multi_proto.core.interfaces.ProtoModel
@@ -104,6 +105,8 @@ open class DataGenerator(
 
         file += "\nobject ${name}_Registration : $REGISTRY_PACKAGE.ModelRegistration {\n"
         file.id(4) += "override val simpleName = \"${qualifiedName(classInfo)}\"\n"
+        classInfo.definition.versionFromAnnotation("AddedIn")?.let { file.id(4) += "override val addedIn = \"$it\"\n" }
+        classInfo.definition.versionFromAnnotation("RemovedIn")?.let { file.id(4) += "override val removedIn = \"$it\"\n" }
 
         file.id(4) += "override val properties = listOf<$REGISTRY_PACKAGE.Property>(\n"
         members.forEach { entry ->
@@ -176,6 +179,8 @@ open class DataGenerator(
                 refSimpleName(type)?.let { sb.append(", modelTypeName = \"$it\"") }
             }
         }
+        member.addedIn?.let { sb.append(", addedIn = \"$it\"") }
+        member.removedIn?.let { sb.append(", removedIn = \"$it\"") }
         sb.append(")")
         return sb.toString()
     }
@@ -186,8 +191,10 @@ open class DataGenerator(
             val model = classInfoCache[ot.kSType] ?: return@mapNotNull null
             val wrapped = "${model.packageName}.${model.name}"
             val caseClass = nm.getClassName()
+            val version = (ot.addedIn?.let { ", addedIn = \"$it\"" } ?: "") +
+                (ot.removedIn?.let { ", removedIn = \"$it\"" } ?: "")
             "$REGISTRY_PACKAGE.OneOfCase(caseName = \"$caseClass\", wrappedTypeName = \"${qualifiedName(model)}\", " +
-                "wrap = { v -> $wrapper.$caseClass(v as $wrapped) })"
+                "wrap = { v -> $wrapper.$caseClass(v as $wrapped) }$version)"
         }
         return "$REGISTRY_PACKAGE.OneOf(cases = listOf(${cases.joinToString(", ")}), " +
             "caseNameOf = { w -> w::class.simpleName!! }, " +
@@ -333,18 +340,29 @@ open class DataGenerator(
         return wrapNested(classInfo, sb.toString())
     }
 
+    /**
+     * `, addedIn: "X", removedIn: "Y"` for a registry literal, each part omitted when null (keeping the
+     * registry lean, like altNames). Reads @AddedIn/@RemovedIn off any annotated symbol.
+     */
+    private fun jsVersionSuffix(symbol: KSAnnotated): String =
+        (symbol.versionFromAnnotation("AddedIn")?.let { ", addedIn: \"$it\"" } ?: "") +
+            (symbol.versionFromAnnotation("RemovedIn")?.let { ", removedIn: \"$it\"" } ?: "")
+
     /** Plain-JS registry entry for one model, matching the runtime adapter's JsModelDesc shape. */
     fun jsRegistryModel(classInfo: ClassInfo): String {
         val props = classInfo.modelMembers.entries.toList().map { entry -> jsRegistryProperty(classInfo, entry) }
-        return "{ simpleName: \"${qualifiedName(classInfo)}\", properties: [${props.joinToString(", ")}] }"
+        return "{ simpleName: \"${qualifiedName(classInfo)}\"${jsVersionSuffix(classInfo.definition)}, " +
+            "properties: [${props.joinToString(", ")}] }"
     }
 
     /** Plain-JS registry entry for one enum (entry values = declaration ordinals, matching [tsEnum]). */
     fun jsRegistryEnum(classInfo: ClassInfo): String {
         val unrecognised = classInfo.declarations.size
-        val entries = classInfo.declarations.mapIndexed { i, d -> "{ name: \"${d.simpleName.asString()}\", value: $i }" } +
-            "{ name: \"UNRECOGNISED\", value: $unrecognised }"
-        return "{ simpleName: \"${qualifiedName(classInfo)}\", unrecognised: $unrecognised, entries: [${entries.joinToString(", ")}] }"
+        val entries = classInfo.declarations.mapIndexed { i, d ->
+            "{ name: \"${d.simpleName.asString()}\", value: $i${jsVersionSuffix(d)} }"
+        } + "{ name: \"UNRECOGNISED\", value: $unrecognised }"
+        return "{ simpleName: \"${qualifiedName(classInfo)}\"${jsVersionSuffix(classInfo.definition)}, " +
+            "unrecognised: $unrecognised, entries: [${entries.joinToString(", ")}] }"
     }
 
     private fun jsRegistryProperty(classInfo: ClassInfo, entry: Map.Entry<String, MemberInfo>): String {
@@ -387,6 +405,8 @@ open class DataGenerator(
                 refSimpleName(type)?.let { sb.append(", modelTypeName: \"$it\"") }
             }
         }
+        member.addedIn?.let { sb.append(", addedIn: \"$it\"") }
+        member.removedIn?.let { sb.append(", removedIn: \"$it\"") }
         sb.append(" }")
         return sb.toString()
     }
@@ -397,7 +417,9 @@ open class DataGenerator(
         // by lower-casing caseName's first char, so camelCase here matches identically to the old PascalCase.
         val cases = oneOf.oneOfClassMap.entries.mapNotNull { (nm, ot) ->
             val model = classInfoCache[ot.kSType] ?: return@mapNotNull null
-            "{ caseName: \"${nm.getVariableName()}\", wrappedTypeName: \"${qualifiedName(model)}\" }"
+            val version = (ot.addedIn?.let { ", addedIn: \"$it\"" } ?: "") +
+                (ot.removedIn?.let { ", removedIn: \"$it\"" } ?: "")
+            "{ caseName: \"${nm.getVariableName()}\", wrappedTypeName: \"${qualifiedName(model)}\"$version }"
         }
         return "{ cases: [${cases.joinToString(", ")}] }"
     }

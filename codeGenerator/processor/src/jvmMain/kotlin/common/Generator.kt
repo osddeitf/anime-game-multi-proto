@@ -73,6 +73,9 @@ abstract class Generator(
         val name: String,
         val kSType: KSType,
         val altNames : List<String>,
+        /** @OneOfEntry addedIn/removedIn Version name, or null when Version.DEFAULT (i.e. inherit the field). */
+        val addedIn: String? = null,
+        val removedIn: String? = null,
     )
 
     data class OneOfData(
@@ -101,6 +104,8 @@ abstract class Generator(
                                         val names = mutableListOf<String>()
                                         var type: KSType? = null
                                         var mainName: String? = null
+                                        var addedIn: String? = null
+                                        var removedIn: String? = null
                                         oneOfEntry.arguments.forEach { oneOfEntryArgument ->
                                             when(oneOfEntryArgument.name?.asString()){
                                                 OneOfEntry::type.name ->
@@ -110,12 +115,17 @@ abstract class Generator(
                                                         names.addAll(altnames)
                                                         mainName = altnames.first()
                                                     }
+                                                OneOfEntry::addedIn.name ->
+                                                    addedIn = versionNameOfValue(oneOfEntryArgument.value)
+                                                OneOfEntry::removedIn.name ->
+                                                    removedIn = versionNameOfValue(oneOfEntryArgument.value)
                                             }
                                         }
                                         type ?: return@forEach
                                         mainName ?: return@forEach
                                         val typeDef = OneOfType(name =  mainName, kSType =  type,
-                                            altNames = if(names.size < 2) emptyList() else names.subList(1, names.size))
+                                            altNames = if(names.size < 2) emptyList() else names.subList(1, names.size),
+                                            addedIn = addedIn, removedIn = removedIn)
                                         oneOfClasses.add(typeDef)
                                         names.forEach { name ->
                                             oneOfClassMap[name] = typeDef
@@ -402,5 +412,15 @@ abstract class Generator(
  */
 internal fun KSAnnotated.versionFromAnnotation(name: String): String? =
     annotations.firstOrNull { it.shortName.asString() == name }
-        ?.let { (it.arguments.firstOrNull()?.value as? KSClassDeclaration)?.simpleName?.asString() }
-        ?.takeIf { it.isNotBlank() }
+        ?.let { versionNameOfValue(it.arguments.firstOrNull()?.value) }
+
+/**
+ * The `Version` enum-constant simple name an annotation argument points at (e.g. "GI_5_3_0"), or null when
+ * absent/blank or the unconstrained sentinel `Version.DEFAULT`. KSP may model an enum-value argument as a
+ * [KSType] or a [KSClassDeclaration], so handle both.
+ */
+internal fun versionNameOfValue(value: Any?): String? = when (value) {
+    is KSType -> value.declaration.simpleName.asString()
+    is KSClassDeclaration -> value.simpleName.asString()
+    else -> null
+}?.takeIf { it.isNotBlank() && it != "DEFAULT" }

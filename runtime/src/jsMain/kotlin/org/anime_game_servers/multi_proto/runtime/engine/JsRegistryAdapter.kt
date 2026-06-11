@@ -35,6 +35,8 @@ external interface JsRegistry {
 external interface JsModelDesc {
     val simpleName: String
     val properties: Array<JsPropertyDesc>
+    val addedIn: String?
+    val removedIn: String?
 }
 external interface JsPropertyDesc {
     val name: String
@@ -45,15 +47,24 @@ external interface JsPropertyDesc {
     val modelTypeName: String?
     val keyModelTypeName: String?
     val oneOf: JsOneOfDesc?
+    val addedIn: String?
+    val removedIn: String?
 }
 external interface JsOneOfDesc { val cases: Array<JsOneOfCaseDesc> }
-external interface JsOneOfCaseDesc { val caseName: String; val wrappedTypeName: String }
+external interface JsOneOfCaseDesc {
+    val caseName: String
+    val wrappedTypeName: String
+    val addedIn: String?
+    val removedIn: String?
+}
 external interface JsEnumDesc {
     val simpleName: String
     val entries: Array<JsEnumEntryDesc>
     val unrecognised: Int
+    val addedIn: String?
+    val removedIn: String?
 }
-external interface JsEnumEntryDesc { val name: String; val value: Int }
+external interface JsEnumEntryDesc { val name: String; val value: Int; val addedIn: String?; val removedIn: String? }
 
 // ---- public entry points ----
 
@@ -79,7 +90,11 @@ class PlainProtoRuntime(registry: JsRegistry, configPaths: ConfigPaths? = null) 
     /** Opt into logging (null = silent default); pass [ConsoleEngineLogger] to see engine errors. */
     fun setLogger(logger: EngineLogger?) = delegate.setLogger(logger)
 
-    /** Decode wire bytes for `simpleName` (version namespace, e.g. "GI_6_5_0") into a plain JS object. */
+    /**
+     * Decode wire bytes for `simpleName` into a plain JS object. `version` is the canonical [Version] name
+     * (e.g. "GI_6_5_0"): its namespace selects the config files and its id drives version-aware field/enum
+     * skipping. An unrecognized string is used verbatim as the config-path token with filtering disabled.
+     */
     fun decode(version: String, simpleName: String, bytes: Uint8Array): Any? =
         delegate.decodeModel(version, simpleName, bytes)
 
@@ -117,6 +132,8 @@ private fun kindOf(name: String) = PropertyKind.valueOf(name)
 
 class JsModelRegistration(desc: JsModelDesc) : ModelRegistration {
     override val simpleName: String = desc.simpleName
+    override val addedIn: String? = desc.addedIn
+    override val removedIn: String? = desc.removedIn
     // The registry omits per-property bookkeeping the position already implies: data index (the property's
     // position; create/read exchange values in this order) and an empty altNames (defaulted to none here).
     override val properties: List<Property> = desc.properties.map { p ->
@@ -129,6 +146,8 @@ class JsModelRegistration(desc: JsModelDesc) : ModelRegistration {
             modelTypeName = p.modelTypeName,
             keyModelTypeName = p.keyModelTypeName,
             oneOf = p.oneOf?.let { buildOneOf(it) },
+            addedIn = p.addedIn,
+            removedIn = p.removedIn,
         )
     }
 
@@ -149,15 +168,17 @@ class JsModelRegistration(desc: JsModelDesc) : ModelRegistration {
 class JsEnumRegistration(desc: JsEnumDesc) : EnumRegistration {
     override val simpleName: String = desc.simpleName
     override val unrecognised: Any = desc.unrecognised
+    override val addedIn: String? = desc.addedIn
+    override val removedIn: String? = desc.removedIn
     override val entries: List<EnumEntry> =
-        desc.entries.map { e -> EnumEntry(e.name, e.value, e.value == desc.unrecognised) }
+        desc.entries.map { e -> EnumEntry(e.name, e.value, e.value == desc.unrecognised, e.addedIn, e.removedIn) }
 }
 
 private fun buildOneOf(d: JsOneOfDesc): OneOf {
     val cases = d.cases.map { c ->
         OneOfCase(c.caseName, c.wrappedTypeName, wrap = { v ->
             val o = newJsObject(); o["case"] = c.caseName; o["value"] = v; o
-        })
+        }, addedIn = c.addedIn, removedIn = c.removedIn)
     }
     return OneOf(
         cases = cases,
