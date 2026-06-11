@@ -13,8 +13,11 @@ import org.anime_game_servers.multi_proto.gi.messages.scene.entity.MotionInfo
 import org.anime_game_servers.multi_proto.gi.messages.scene.entity.ProtEntityType
 import org.anime_game_servers.multi_proto.gi.messages.scene.entity.SceneAvatarInfo
 import org.anime_game_servers.multi_proto.gi.messages.scene.entity.SceneEntityInfo
+import org.anime_game_servers.multi_proto.runtime.common.ProtoMappingConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Per-field e2e: instantiate a gi model with a small number of fields set, encode, decode, compare.
@@ -120,16 +123,48 @@ class DecodeEncodeTest {
         )
     }
 
+    /**
+     * proto3 field presence. In proto3 a scalar/string/enum/repeated/map field has *implicit* presence: it
+     * is never "absent" on the wire — an omitted field decodes to its default (0 / "" / false / empty / the
+     * enum's zero-value). Only message fields and oneofs have *explicit* presence and can be genuinely unset.
+     *
+     * The generated models encode this exactly: Kotlin makes scalars/enum/list/map non-null (with defaults)
+     * and messages/oneofs nullable; the TS .d.ts mirrors the split as required vs optional (`?`). This test
+     * locks in the runtime side of that contract — decoding an EMPTY payload must yield all-defaults (incl.
+     * the enum's proto3 zero-value, subsuming the old per-enum default check), with only message/oneof null.
+     */
     @Test
-    fun defaultEnumValue() {
+    fun proto3Presence_emptyPayloadFillsDefaultsNotNulls() {
         if (!fixturesPresent()) return
+        // plain.desc stores the real proto enum value names (the @AltName form, e.g. PROT_ENTITY_TYPE_NONE);
+        // @AltName isn't resolved by the runtime itself, so map the zero-value Kotlin name to its proto name
+        // for the enum to bind. (Field names need no mapping — snake_case normalization handles those.)
         val rt = buildRuntime(
-            obfDesc,
-            mapping = subMapping(
-                "AbilityMetaModifierChange", "action",
+            plainDesc,
+            mapping = ProtoMappingConfig(
+                enums = mapOf("ProtEntityType" to mapOf("PROT_ENTITY_NONE" to "PROT_ENTITY_TYPE_NONE")),
             ),
         )
-        val modifierChange = rt.decodeFromByteArray("AbilityMetaModifierChange", byteArrayOf()) as AbilityMetaModifierChange
-        assertEquals(modifierChange.action, ModifierAction.ADDED)
+        val info = rt.decodeFromByteArray("SceneEntityInfo", byteArrayOf()) as SceneEntityInfo
+
+        // scalars: always present, defaulted (never null)
+        assertEquals(0, info.entityId)
+        assertEquals("", info.name)
+        assertEquals(0, info.lifeState)
+        // enum: present, defaulted to the proto3 zero-value (PROT_ENTITY_NONE), NOT the UNRECOGNISED sentinel
+        assertEquals(ProtEntityType.PROT_ENTITY_NONE, info.entityType)
+        // repeated & map: present, empty
+        assertTrue(info.propList.isEmpty())
+        assertTrue(info.tagList.isEmpty())
+        assertTrue(info.propMap.isEmpty())
+        assertTrue(info.fightPropMap.isEmpty())
+        // message & oneof: the only kinds with explicit presence → null when absent
+        assertNull(info.motionInfo)
+        assertNull(info.abilityInfo)
+        assertNull(info.entity)
+
+        // Inverse direction: a model left at its defaults encodes to ZERO bytes — proto3 omits default-valued
+        // scalars/enums on the wire, which is exactly why decode must re-materialize them as defaults above.
+        assertEquals(0, rt.encodeToByteArray("SceneEntityInfo", SceneEntityInfo()).size)
     }
 }
