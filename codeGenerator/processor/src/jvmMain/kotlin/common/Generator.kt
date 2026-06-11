@@ -59,7 +59,10 @@ abstract class Generator(
         val type: KSType,
         val isPrimaryConstructorMember: Boolean = false,
         val converters: List<TypeConverter>,
-        val parentType: String? = type.getParentType()
+        val parentType: String? = type.getParentType(),
+        /** Version namespace from @AddedIn / @RemovedIn on this field, if present (e.g. "GI_0_9_0"). */
+        val addedIn: String? = null,
+        val removedIn: String? = null,
     ) {
         fun hasSameName(other: MemberInfo): Boolean {
             return names.any { name -> other.names.any { it.equals(name, ignoreCase = true) } }
@@ -344,7 +347,12 @@ abstract class Generator(
             } }
                 .associateByTo(this, { it.simpleName.asString().lowercase() },
                     { property ->
-                        MemberInfo(property.simpleName.asString(), property.getNames(), property.type.resolve(), property.isPropertyInConstructor(definition), property.getConverters())
+                        MemberInfo(
+                            property.simpleName.asString(), property.getNames(), property.type.resolve(),
+                            property.isPropertyInConstructor(definition), property.getConverters(),
+                            addedIn = property.versionFromAnnotation("AddedIn"),
+                            removedIn = property.versionFromAnnotation("RemovedIn"),
+                        )
                 })
         }
     }
@@ -386,3 +394,13 @@ abstract class Generator(
 
     abstract fun createClassForProto(file: OutputStream, classInfo:ClassInfo)
 }
+
+/**
+ * Version namespace (e.g. "GI_0_9_0") from an @AddedIn/@RemovedIn-style annotation, or null if absent.
+ * Works on any annotated symbol — a property (field-level version info) or a class/enum declaration
+ * (type-level version info).
+ */
+internal fun KSAnnotated.versionFromAnnotation(name: String): String? =
+    annotations.firstOrNull { it.shortName.asString() == name }
+        ?.let { (it.arguments.firstOrNull()?.value as? KSClassDeclaration)?.simpleName?.asString() }
+        ?.takeIf { it.isNotBlank() }

@@ -33,6 +33,13 @@ external interface ProtoLongCtor {
     fun fromBits(low: Int, high: Int, unsigned: Boolean): dynamic
 }
 
+// protobuf.js (CommonJS) puts its exports on `.default` under Node's native ESM interop, but directly on
+// the namespace under bundlers — accept either, mirroring the descriptor loader fix.
+private val PB: dynamic = run {
+    val m = protobuf.asDynamic()
+    if (m.Writer != undefined) m else m.default
+}
+
 internal fun ByteArray.toUint8Array(): Uint8Array {
     val i8 = this.unsafeCast<Int8Array>()
     return Uint8Array(i8.buffer, i8.byteOffset, i8.length)
@@ -43,13 +50,13 @@ internal fun Uint8Array.toByteArray(): ByteArray {
 }
 
 internal class JsProtobufWriter : ProtoWriter {
-    private val w = protobuf.Writer.create()
+    private val w: dynamic = PB.Writer.create()
 
     // Kotlin/JS Long -> protobuf.js Long via fromBits (requires the `long` npm package, which
     // protobuf.js auto-detects into util.Long). Falls back to a JS number if absent.
     private fun longValue(value: Long): dynamic {
-        val ctor = protobuf.util.Long
-        return if (ctor != null) ctor.fromBits(value.toInt(), (value ushr 32).toInt(), false)
+        val ctor = PB.util.Long
+        return if (ctor != null && ctor != undefined) ctor.fromBits(value.toInt(), (value ushr 32).toInt(), false)
         else value.toDouble()
     }
 
@@ -60,7 +67,10 @@ internal class JsProtobufWriter : ProtoWriter {
     override fun writeLengthDelimited(bytes: ByteArray) { w.bytes(bytes.toUint8Array()) }
     override fun fork() { w.fork() }
     override fun ldelim() { w.ldelim() }
-    override fun toByteArray(): ByteArray = w.finish().toByteArray()
+    override fun toByteArray(): ByteArray {
+        val finished: Uint8Array = w.finish() // typed so the Kotlin extension resolves (w is dynamic)
+        return finished.toByteArray()
+    }
 }
 
 object JsProtoBufferFactory : ProtoBufferFactory {

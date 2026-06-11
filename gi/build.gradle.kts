@@ -23,6 +23,10 @@ else {
     "0.3.0-SNAPSHOT"
 }
 
+// Optional npm scope for the published JS package: -Pnpm.scope=my-org (or in gradle.properties) ->
+// "@my-org/multi-proto-gi". Leave unset for an unscoped name. The leading "@" is optional.
+val npmScope = providers.gradleProperty("npm.scope").orNull?.removePrefix("@")
+
 ksp {
     arg("basePacket", "org.anime_game_servers.multi_proto.gi")
 }
@@ -42,6 +46,15 @@ kotlin {
         compilerOptions {
             target.set("es2015") // ES6+ output
             freeCompilerArgs.add("-Xes-long-as-bigint") // Long -> TS bigint; es2015 alone is insufficient
+        }
+        if (npmScope != null) {
+            // Compute the scoped name from the project (don't read-modify-write packageJson.name): the
+            // packageJson {} block runs for several package.json files, so a self-referential prepend would
+            // double-scope. "${rootProject.name}-${project.name}" is the Kotlin/JS default base name.
+            val scopedName = "@$npmScope/${rootProject.name}-${project.name}"
+            compilations.named("main") {
+                packageJson { name = scopedName }
+            }
         }
     }
     mingwX64()
@@ -123,6 +136,39 @@ if (isDynamicRuntime.get() == "true") {
 
 ksp {
     arg("isDynamicRuntime", isDynamicRuntime.get())
+    // Opt-in: emit the pure-JS gi data package (index.d.ts + registry.js) for the plain-object JS approach.
+    // -Porg.anime_game_servers.emitTypescript=true
+    arg("emitTypescript", providers.gradleProperty("org.anime_game_servers.emitTypescript").orElse("false").get())
+}
+
+// Assemble the pure-JS gi data package (generated index.d.ts + registry.js + package.json) for the
+// plain-object approach. Registered only when emitTypescript is on (KSP then emits the files):
+//   ./gradlew :gi:assembleJsData -Porg.anime_game_servers.emitTypescript=true [-Pnpm.scope=my-org]
+if (providers.gradleProperty("org.anime_game_servers.emitTypescript").orNull == "true") {
+    val jsDataDir = layout.buildDirectory.dir("dist/js-data")
+    val pkgName = (if (npmScope != null) "@$npmScope/" else "") + "multi-proto-gi"
+    tasks.register<Copy>("assembleJsData") {
+        group = "distribution"
+        description = "Assemble the pure-JS gi data package: index.d.ts + registry.js + package.json."
+        dependsOn("kspCommonMainKotlinMetadata")
+        from(layout.buildDirectory.dir("generated/ksp/metadata/commonMain/resources")) {
+            include("index.d.ts", "registry.js")
+        }
+        into(jsDataDir)
+        doLast {
+            jsDataDir.get().file("package.json").asFile.writeText(
+                """
+                {
+                  "name": "$pkgName",
+                  "version": "${project.version}",
+                  "type": "module",
+                  "main": "registry.js",
+                  "types": "index.d.ts"
+                }
+                """.trimIndent() + "\n"
+            )
+        }
+    }
 }
 
 publishing {

@@ -236,7 +236,9 @@ class ProtoDescriptorRuntime(
         val writeOrder = mutableListOf<ModelPropertyInfo>()
         val oneOfs = mutableListOf<OneOfPropInfo>()
 
-        for (property in registration.properties) {
+        // The property's position in registration.properties IS its data index (create/read exchange values
+        // in this order); the engine carries it internally as ModelPropertyInfo/OneOfPropInfo.dataIndex.
+        registration.properties.forEachIndexed { dataIndex, property ->
             try {
                 if (property.kind == PropertyKind.ONEOF) {
                     val oneOf = property.oneOf ?: error("oneof property ${property.name} missing descriptor")
@@ -253,19 +255,19 @@ class ProtoDescriptorRuntime(
                         }
                         val member = buildMember(
                             queue, refs, modelName, fieldName, refKind, refKind,
-                            case.wrappedTypeName, property.dataIndex, protoField, case, null,
+                            case.wrappedTypeName, dataIndex, protoField, case, null,
                         )
                         membersById[protoField.number] = member
                         casesByName[case.caseName] = member
                     }
-                    oneOfs += OneOfPropInfo(property.dataIndex, oneOf, casesByName)
+                    oneOfs += OneOfPropInfo(dataIndex, oneOf, casesByName)
                 } else {
                     val protoField = matchField(property.name, protoFields)
                         ?: error("No proto field for ${modelName}.${property.name}")
                     val refKind = refKindOf(property)
                     val member = buildMember(
                         queue, refs, modelName, property.name, property.kind, refKind,
-                        property.modelTypeName, property.dataIndex, protoField, null, property,
+                        property.modelTypeName, dataIndex, protoField, null, property,
                     )
                     membersById[protoField.number] = member
                     writeOrder += member

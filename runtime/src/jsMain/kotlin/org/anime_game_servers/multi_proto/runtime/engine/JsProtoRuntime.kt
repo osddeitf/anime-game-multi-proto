@@ -16,6 +16,7 @@ import org.anime_game_servers.multi_proto.runtime.common.encryptionPattern
 import org.anime_game_servers.multi_proto.runtime.common.mappingPattern
 import org.anime_game_servers.multi_proto.runtime.common.packetsPattern
 import org.anime_game_servers.multi_proto.runtime.common.resolveConfigPath
+import org.khronos.webgl.Uint8Array
 import kotlin.js.JsExport
 import kotlin.reflect.KClass
 
@@ -65,6 +66,29 @@ class JsProtoRuntime(
             acquireCache(version.namespace).decodeFromByteArray(modelClass.simpleName!!, byteArray) as T?
         } catch (ex: Throwable) {
             logger?.error(ex) { "(descriptor-js) decodeFromByteArray failed for ${modelClass.simpleName}" }
+            null
+        }
+    }
+
+    /**
+     * Plain-object API: decode wire [bytes] for model [simpleName] (under version namespace [version]) into a
+     * PLAIN JS OBJECT — used with the plain-data registry (no Kotlin model class). [bytes] is a Uint8Array.
+     */
+    fun decodeModel(version: String, simpleName: String, bytes: Uint8Array): Any? {
+        return try {
+            acquireCache(version).decodeFromByteArray(simpleName, uint8ToByteArray(bytes))
+        } catch (ex: Throwable) {
+            logger?.error(ex) { "(descriptor-js) decodeModel failed for $simpleName" }
+            null
+        }
+    }
+
+    /** Plain-object API: encode a PLAIN JS OBJECT [model] for [simpleName] to a Uint8Array. */
+    fun encodeModel(version: String, simpleName: String, model: Any): Uint8Array? {
+        return try {
+            byteArrayToUint8(acquireCache(version).encodeToByteArray(simpleName, model))
+        } catch (ex: Throwable) {
+            logger?.error(ex) { "(descriptor-js) encodeModel failed for $simpleName" }
             null
         }
     }

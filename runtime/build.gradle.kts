@@ -11,6 +11,10 @@ plugins {
 group = "org.anime_game_servers.multi_proto"
 version = "0.3.0-SNAPSHOT"
 
+// Optional npm scope for the published JS package: -Pnpm.scope=my-org (or in gradle.properties) ->
+// "@my-org/multi-proto-runtime". Leave unset for an unscoped name. The leading "@" is optional.
+val npmScope = providers.gradleProperty("npm.scope").orNull?.removePrefix("@")
+
 kotlin {
     jvmToolchain(17)
     jvm {
@@ -26,6 +30,15 @@ kotlin {
         compilerOptions {
             target.set("es2015") // ES6+ output
             freeCompilerArgs.add("-Xes-long-as-bigint") // Long -> TS bigint; es2015 alone is insufficient
+        }
+        if (npmScope != null) {
+            // Compute the scoped name from the project (don't read-modify-write packageJson.name): the
+            // packageJson {} block runs for several package.json files, so a self-referential prepend would
+            // double-scope. "${rootProject.name}-${project.name}" is the Kotlin/JS default base name.
+            val scopedName = "@$npmScope/${rootProject.name}-${project.name}"
+            compilations.named("main") {
+                packageJson { name = scopedName }
+            }
         }
     }
     mingwX64()
@@ -53,6 +66,8 @@ kotlin {
             dependencies {
                 implementation(npm("protobufjs", "8.6.0"))
                 implementation(npm("long", "5.3.2")) // enables exact 64-bit via protobuf.util.Long
+                // No gi dependency: the plain-object approach ships gi as a separate pure-JS data package and
+                // passes its registry in as plain data (PlainProtoRuntime), so nothing Kotlin crosses packages.
             }
         }
         jvmMain {

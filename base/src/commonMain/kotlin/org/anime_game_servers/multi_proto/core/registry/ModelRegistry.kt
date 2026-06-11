@@ -38,12 +38,15 @@ class OneOf(
     val unwrap: (Any) -> Any?,
 )
 
-/** Metadata for one constructor property, in constructor (data-class) order. */
+/**
+ * Metadata for one constructor property. The position in [ModelRegistration.properties] IS the property's
+ * data index: [ModelRegistration.create]/[ModelRegistration.read] exchange values in this same order, so no
+ * explicit index is carried.
+ */
 class Property(
     val name: String,
     val altNames: List<String>,
     val kind: PropertyKind,
-    val dataIndex: Int,
     /** LIST element kind / MAP value kind. */
     val elementKind: PropertyKind? = null,
     /** MAP key kind. */

@@ -52,8 +52,11 @@ class EnumGenerator(
 
     override fun addRegistration(file: OutputStream, classInfo: ClassInfo) {
         val name = classInfo.name
+        // Nested proto enums (e.g. Achievement.Status) use their parent-qualified name as the registry
+        // identity so same-simpleName enums don't collide in the simpleName-keyed runtime maps.
+        val identity = classInfo.definition.getParentType()?.takeIf { it.isNotBlank() }?.let { "$it.$name" } ?: name
         file += "\nobject ${name}_Registration : $REGISTRY_PACKAGE.EnumRegistration {\n"
-        file.id(4) += "override val simpleName = \"$name\"\n"
+        file.id(4) += "override val simpleName = \"$identity\"\n"
         file.id(4) += "override val entries = listOf<$REGISTRY_PACKAGE.EnumEntry>(\n"
         classInfo.declarations.forEach {
             val en = it.simpleName.asString()
